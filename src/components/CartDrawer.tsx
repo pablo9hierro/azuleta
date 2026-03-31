@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -6,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Minus, Plus, Trash2, QrCode, CreditCard, MapPin, Truck,
-  Loader2, ExternalLink, RefreshCw, AlertCircle, CheckCircle2, ShoppingBag, Copy, Check,
+  Loader2, ExternalLink, RefreshCw, AlertCircle, CheckCircle2, ShoppingBag, Copy, Check, Phone,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import type { Product } from "@/data/store";
@@ -18,6 +19,8 @@ import {
   type AbacateBilling,
   type AbacateProduct,
 } from "@/lib/abacatepay";
+import { saveSaleToSupabase, upsertCustomer } from "@/lib/supabase";
+import { useCustomer } from "@/contexts/CustomerContext";
 import { toast } from "sonner";
 
 export interface CartItem {
@@ -33,7 +36,7 @@ interface CartDrawerProps {
 }
 
 type PaymentMethod = "pix" | "credit" | "debit";
-type Step = "cart" | "pix-loading" | "pix-qrcode" | "card-form" | "card-processing";
+type Step = "cart" | "customer-id" | "pix-loading" | "pix-qrcode" | "card-form" | "card-processing";
 
 interface ReceiptSnapshot {
   items: { name: string; quantity: number; unitPrice: number }[];
@@ -55,6 +58,11 @@ interface CardForm {
   installments: string;
 }
 
+interface CustomerForm {
+  name: string;
+  phone: string;
+}
+
 function fmtCard(v: string) {
   return v.replace(/\D/g, "").slice(0, 16).replace(/(.{4})/g, "$1 ").trim();
 }
@@ -63,8 +71,17 @@ function fmtExpiry(v: string) {
   if (d.length > 2) return d.slice(0, 2) + "/" + d.slice(2);
   return d;
 }
+function fmtPhone(v: string) {
+  const d = v.replace(/\D/g, "").slice(0, 11);
+  if (d.length > 10) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+  if (d.length > 6) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  if (d.length > 2) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+  return d;
+}
 
 export default function CartDrawer({ open, onClose, items, setItems }: CartDrawerProps) {
+  const { customer, setCustomer } = useCustomer();
+  const navigate = useNavigate();
   const [step, setStep] = useState<Step>("cart");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pix");
   const [wantsDelivery, setWantsDelivery] = useState(false);
@@ -73,6 +90,9 @@ export default function CartDrawer({ open, onClose, items, setItems }: CartDrawe
   const [successOrder, setSuccessOrder] = useState<string | null>(null);
   const [cardForm, setCardForm] = useState<CardForm>({ number: "", name: "", expiry: "", cvv: "", installments: "1" });
   const [cardErrors, setCardErrors] = useState<Partial<CardForm>>({});
+  const [customerForm, setCustomerForm] = useState<CustomerForm>({ name: customer?.name ?? "", phone: customer ? fmtPhone(customer.phone) : "" });
+  const [customerErrors, setCustomerErrors] = useState<Partial<CustomerForm>>({});
+  const [customerSaving, setCustomerSaving] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const receiptSnapshotRef = useRef<ReceiptSnapshot | null>(null);
   const [pixCopied, setPixCopied] = useState(false);
@@ -88,6 +108,7 @@ export default function CartDrawer({ open, onClose, items, setItems }: CartDrawe
       setSuccessOrder(null);
       setCardForm({ number: "", name: "", expiry: "", cvv: "", installments: "1" });
       setCardErrors({});
+      setCustomerErrors({});
     }
   }, [open]);
 
@@ -122,10 +143,11 @@ export default function CartDrawer({ open, onClose, items, setItems }: CartDrawe
     return true;
   };
 
-  const createSale = (method: PaymentMethod) =>
+  const createSale = (method: PaymentMethod, custName?: string) =>
     addSale({
       products: items.map((i) => ({ productId: i.product.id, name: i.product.name, quantity: i.quantity, unitPrice: i.product.price })),
       total, paymentMethod: method, status: "pending",
+      customerName: custName ?? customer?.name,
       deliveryRequested: wantsDelivery,
       deliveryCep: wantsDelivery ? deliveryForm.cep : undefined,
       deliveryNumber: wantsDelivery ? deliveryForm.number : undefined,
@@ -148,6 +170,7 @@ export default function CartDrawer({ open, onClose, items, setItems }: CartDrawe
   const handleSuccessClose = () => {
     toast.success("Obrigado pela compra! 🎉");
     handleClose();
+    navigate("/meus-pedidos");
   };
 
   const handleCopyPixUrl = async (url: string) => {
@@ -160,8 +183,16 @@ export default function CartDrawer({ open, onClose, items, setItems }: CartDrawe
     }
   };
 
-  const handlePixCheckout = async () => {
-    if (!validateDelivery()) return;
+  const validateCustomer = (): boolean => {
+    const errs: Partial<CustomerForm> = {};
+    if (!customerForm.name.trim()) errs.name = "Nome obrigatório";
+    const rawPhone = customerForm.phone.replace(/\D/g, "");
+    if (rawPhone.length < 10) errs.phone = "Telefone inválido";
+    setCustomerErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const doPixCheckout = async (custName: string, custPhone: string) => {
     receiptSnapshotRef.current = {
       items: items.map((i) => ({ name: i.product.name, quantity: i.quantity, unitPrice: i.product.price })),
       total,
@@ -175,7 +206,20 @@ export default function CartDrawer({ open, onClose, items, setItems }: CartDrawe
     };
     setStep("pix-loading");
     try {
-      const sale = createSale("pix");
+      const sale = createSale("pix", custName);
+      saveSaleToSupabase({
+        total,
+        paymentMethod: "pix",
+        status: "pending",
+        customerName: custName,
+        customerPhone: custPhone,
+        deliveryRequested: wantsDelivery,
+        deliveryCep: deliveryForm.cep,
+        deliveryNumber: deliveryForm.number,
+        deliveryReference: deliveryForm.reference,
+        items: items.map((i) => ({ productId: i.product.id, name: i.product.name, quantity: i.quantity, unitPrice: i.product.price })),
+      }).catch(() => { /* non-critical */ });
+
       let billing: AbacateBilling;
       if (isAbacatePayConfigured()) {
         const abacateProducts: AbacateProduct[] = items.map((i) => ({
@@ -223,6 +267,34 @@ export default function CartDrawer({ open, onClose, items, setItems }: CartDrawe
     }
   };
 
+  const handleCustomerContinue = async () => {
+    if (!validateCustomer()) return;
+    setCustomerSaving(true);
+    try {
+      const rawPhone = customerForm.phone.replace(/\D/g, "");
+      await upsertCustomer(customerForm.name.trim(), rawPhone);
+      setCustomer({ name: customerForm.name.trim(), phone: rawPhone });
+      if (paymentMethod === "pix") {
+        await doPixCheckout(customerForm.name.trim(), rawPhone);
+      } else {
+        setStep("card-form");
+      }
+    } catch {
+      toast.error("Erro ao salvar identificação. Tente novamente.");
+    } finally {
+      setCustomerSaving(false);
+    }
+  };
+
+  const handlePixCheckout = async () => {
+    if (!validateDelivery()) return;
+    if (!customer) {
+      setStep("customer-id");
+      return;
+    }
+    await doPixCheckout(customer.name, customer.phone);
+  };
+
   const validateCard = (): boolean => {
     const errs: Partial<CardForm> = {};
     const digits = cardForm.number.replace(/\D/g, "");
@@ -237,6 +309,8 @@ export default function CartDrawer({ open, onClose, items, setItems }: CartDrawe
   const handleCardSubmit = async () => {
     if (!validateCard()) return;
     if (!validateDelivery()) return;
+    const custName = customer?.name ?? customerForm.name.trim();
+    const custPhone = customer?.phone ?? customerForm.phone.replace(/\D/g, "");
     receiptSnapshotRef.current = {
       items: items.map((i) => ({ name: i.product.name, quantity: i.quantity, unitPrice: i.product.price })),
       total,
@@ -249,7 +323,19 @@ export default function CartDrawer({ open, onClose, items, setItems }: CartDrawe
       paidAt: new Date().toLocaleString("pt-BR"),
     };
     setStep("card-processing");
-    const sale = createSale(paymentMethod as "credit" | "debit");
+    const sale = createSale(paymentMethod as "credit" | "debit", custName);
+    saveSaleToSupabase({
+      total,
+      paymentMethod,
+      status: "paid",
+      customerName: custName,
+      customerPhone: custPhone,
+      deliveryRequested: wantsDelivery,
+      deliveryCep: deliveryForm.cep,
+      deliveryNumber: deliveryForm.number,
+      deliveryReference: deliveryForm.reference,
+      items: items.map((i) => ({ productId: i.product.id, name: i.product.name, quantity: i.quantity, unitPrice: i.product.price })),
+    }).catch(() => { /* non-critical */ });
     await new Promise((r) => setTimeout(r, 2500));
     setSuccessOrder(sale.id);
   };
@@ -263,6 +349,7 @@ export default function CartDrawer({ open, onClose, items, setItems }: CartDrawe
           <SheetHeader>
             <SheetTitle>
               {step === "cart" && "Carrinho"}
+              {step === "customer-id" && "Identificação"}
               {step === "pix-loading" && "Gerando PIX..."}
               {step === "pix-qrcode" && "Pague via PIX"}
               {step === "card-form" && `Pagamento com ${paymentMethod === "credit" ? "Crédito" : "Débito"}`}
@@ -347,12 +434,55 @@ export default function CartDrawer({ open, onClose, items, setItems }: CartDrawe
                       <QrCode size={18} /> Gerar QR Code PIX
                     </Button>
                   ) : (
-                    <Button onClick={() => { if (validateDelivery()) setStep("card-form"); }} className="w-full gap-2" size="lg">
+                    <Button onClick={() => {
+                      if (!validateDelivery()) return;
+                      if (!customer) { setStep("customer-id"); return; }
+                      setStep("card-form");
+                    }} className="w-full gap-2" size="lg">
                       <CreditCard size={18} /> Pagar com {paymentMethod === "credit" ? "Crédito" : "Débito"}
                     </Button>
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* ── CUSTOMER ID STEP ── */}
+          {step === "customer-id" && (
+            <div className="flex flex-col flex-1 overflow-y-auto space-y-4 py-4">
+              <p className="text-sm text-muted-foreground">
+                Para acompanhar seu pedido, informe seus dados de contato:
+              </p>
+              <div>
+                <Label className="text-xs">Seu nome *</Label>
+                <Input
+                  placeholder="Nome completo"
+                  value={customerForm.name}
+                  onChange={(e) => { setCustomerForm({ ...customerForm, name: e.target.value }); setCustomerErrors({ ...customerErrors, name: undefined }); }}
+                  className={customerErrors.name ? "border-destructive" : ""}
+                />
+                {customerErrors.name && <p className="text-xs text-destructive mt-0.5">{customerErrors.name}</p>}
+              </div>
+              <div>
+                <Label className="text-xs">Telefone *</Label>
+                <div className="relative">
+                  <Phone size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="(11) 99999-9999"
+                    value={customerForm.phone}
+                    onChange={(e) => { setCustomerForm({ ...customerForm, phone: fmtPhone(e.target.value) }); setCustomerErrors({ ...customerErrors, phone: undefined }); }}
+                    className={`pl-8 ${customerErrors.phone ? "border-destructive" : ""}`}
+                  />
+                </div>
+                {customerErrors.phone && <p className="text-xs text-destructive mt-0.5">{customerErrors.phone}</p>}
+              </div>
+              <div className="grid grid-cols-2 gap-2 pt-2">
+                <Button variant="outline" onClick={() => setStep("cart")}>Voltar</Button>
+                <Button onClick={handleCustomerContinue} disabled={customerSaving} className="gap-2">
+                  {customerSaving ? <Loader2 size={15} className="animate-spin" /> : null}
+                  Continuar
+                </Button>
+              </div>
             </div>
           )}
 
