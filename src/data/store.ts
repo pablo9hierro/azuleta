@@ -9,6 +9,7 @@ export interface Product {
   price: number;
   stock: number;
   imageUrl: string;
+  deliverable: boolean;
   createdAt: string;
 }
 
@@ -16,10 +17,14 @@ export interface Sale {
   id: string;
   products: { productId: string; name: string; quantity: number; unitPrice: number }[];
   total: number;
-  paymentMethod: "pix" | "credit" | "debit";
+  paymentMethod: "pix" | "credit" | "debit" | "local";
   status: "pending" | "paid" | "cancelled";
   createdAt: string;
   customerName?: string;
+  deliveryRequested?: boolean;
+  deliveryCep?: string;
+  deliveryNumber?: string;
+  deliveryReference?: string;
 }
 
 // AbacatePay-compatible billing structure
@@ -48,6 +53,7 @@ let products: Product[] = [
     price: 34.90,
     stock: 45,
     imageUrl: "https://images.unsplash.com/photo-1586864387789-628af9feed72?w=300&h=300&fit=crop",
+    deliverable: false,
     createdAt: "2024-01-15T10:00:00Z",
   },
   {
@@ -58,6 +64,7 @@ let products: Product[] = [
     price: 38.50,
     stock: 120,
     imageUrl: "https://images.unsplash.com/photo-1590680093498-1b2c6eddd20c?w=300&h=300&fit=crop",
+    deliverable: true,
     createdAt: "2024-01-15T10:00:00Z",
   },
   {
@@ -68,6 +75,7 @@ let products: Product[] = [
     price: 189.90,
     stock: 30,
     imageUrl: "https://images.unsplash.com/photo-1562259929-b4e1fd3aef09?w=300&h=300&fit=crop",
+    deliverable: true,
     createdAt: "2024-01-16T10:00:00Z",
   },
   {
@@ -78,6 +86,7 @@ let products: Product[] = [
     price: 22.90,
     stock: 200,
     imageUrl: PLACEHOLDER_IMAGE,
+    deliverable: false,
     createdAt: "2024-01-17T10:00:00Z",
   },
   {
@@ -88,6 +97,7 @@ let products: Product[] = [
     price: 15.90,
     stock: 60,
     imageUrl: PLACEHOLDER_IMAGE,
+    deliverable: false,
     createdAt: "2024-01-18T10:00:00Z",
   },
 ];
@@ -194,7 +204,6 @@ export function addSale(sale: Omit<Sale, "id" | "createdAt">): Sale {
     createdAt: new Date().toISOString(),
   };
   sales = [...sales, newSale];
-  // Decrease stock
   sale.products.forEach((item) => {
     const product = products.find((p) => p.id === item.productId);
     if (product) {
@@ -209,7 +218,7 @@ export function createBilling(saleId: string, amount: number, productItems: Abac
   const billing: AbacatePayBilling = {
     id: `bill_${String(billings.length + 1).padStart(3, "0")}`,
     url: `https://pay.abacatepay.com/mock/${saleId}`,
-    amount: amount * 100, // cents
+    amount: amount * 100,
     status: "PENDING",
     devMode: true,
     methods: ["PIX"],
@@ -234,11 +243,9 @@ export function parseProductsFromXML(xmlString: string): Omit<Product, "id" | "c
 
   const parsedProducts: Omit<Product, "id" | "createdAt">[] = [];
 
-  // Try common XML structures for product catalogs (NFe, generic)
   const detElements = doc.querySelectorAll("det");
 
   if (detElements.length > 0) {
-    // NFe-style XML
     detElements.forEach((det) => {
       const prod = det.querySelector("prod");
       if (prod) {
@@ -254,11 +261,11 @@ export function parseProductsFromXML(xmlString: string): Omit<Product, "id" | "c
           price: price || 0,
           stock: 0,
           imageUrl: "",
+          deliverable: false,
         });
       }
     });
   } else {
-    // Generic XML: look for <produto> or <product> elements
     const productElements = doc.querySelectorAll("produto, product, item");
     productElements.forEach((el) => {
       const name = el.querySelector("nome, name, xProd")?.textContent || el.getAttribute("nome") || "Produto";
@@ -272,6 +279,7 @@ export function parseProductsFromXML(xmlString: string): Omit<Product, "id" | "c
         price: 0,
         stock: 0,
         imageUrl: "",
+        deliverable: false,
       });
     });
   }

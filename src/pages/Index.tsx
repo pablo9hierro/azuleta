@@ -5,13 +5,11 @@ import CartDrawer, { type CartItem } from "@/components/CartDrawer";
 import { getProducts, type Product } from "@/data/store";
 import { ShoppingCart, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { toast } from "sonner";
 
 export default function Index() {
   const [search, setSearch] = useState("");
   const [cartOpen, setCartOpen] = useState(false);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [, setRefresh] = useState(0);
 
   const products = useMemo(() => getProducts(), []);
   const filtered = products.filter(
@@ -32,7 +30,18 @@ export default function Index() {
       }
       return [...prev, { product, quantity: 1 }];
     });
-    toast.success(`${product.name} adicionado ao carrinho`);
+  };
+
+  const removeFromCart = (product: Product) => {
+    setCartItems((prev) =>
+      prev
+        .map((i) => (i.product.id === product.id ? { ...i, quantity: i.quantity - 1 } : i))
+        .filter((i) => i.quantity > 0)
+    );
+  };
+
+  const getQuantity = (productId: string) => {
+    return cartItems.find((i) => i.product.id === productId)?.quantity || 0;
   };
 
   return (
@@ -46,7 +55,7 @@ export default function Index() {
           </p>
         </div>
 
-        {/* Search + Cart button */}
+        {/* Search */}
         <div className="flex items-center gap-3 mb-6">
           <div className="relative flex-1">
             <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -57,23 +66,18 @@ export default function Index() {
               className="pl-10"
             />
           </div>
-          <button
-            onClick={() => setCartOpen(true)}
-            className="relative bg-accent text-accent-foreground p-3 rounded-xl hover:brightness-110 transition-all"
-          >
-            <ShoppingCart size={20} />
-            {cartCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
-                {cartCount}
-              </span>
-            )}
-          </button>
         </div>
 
         {/* Products */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
           {filtered.map((product) => (
-            <ProductCard key={product.id} product={product} onAddToCart={addToCart} />
+            <ProductCard
+              key={product.id}
+              product={product}
+              quantity={getQuantity(product.id)}
+              onAdd={addToCart}
+              onRemove={removeFromCart}
+            />
           ))}
         </div>
 
@@ -81,6 +85,19 @@ export default function Index() {
           <p className="text-center text-muted-foreground py-20">Nenhum produto encontrado.</p>
         )}
       </div>
+
+      {/* Floating cart button - always visible */}
+      <button
+        onClick={() => setCartOpen(true)}
+        className="fixed bottom-20 right-4 md:bottom-6 md:right-6 z-50 bg-primary text-primary-foreground p-4 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all active:scale-95"
+      >
+        <ShoppingCart size={24} />
+        {cartCount > 0 && (
+          <span className="absolute -top-1 -right-1 bg-accent text-accent-foreground text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center">
+            {cartCount}
+          </span>
+        )}
+      </button>
 
       <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)} items={cartItems} setItems={setCartItems} />
     </Layout>
