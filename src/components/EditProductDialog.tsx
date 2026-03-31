@@ -22,9 +22,9 @@ export default function EditProductDialog({ product, open, onClose, onUpdated }:
     price: product?.price || 0,
     stock: product?.stock || 0,
     imageUrl: product?.imageUrl || "",
+    deliverable: product?.deliverable || false,
   });
 
-  // Sync form when product changes
   if (product && form.name !== product.name && form.description !== product.description) {
     setForm({
       name: product.name,
@@ -33,6 +33,7 @@ export default function EditProductDialog({ product, open, onClose, onUpdated }:
       price: product.price,
       stock: product.stock,
       imageUrl: product.imageUrl,
+      deliverable: product.deliverable,
     });
   }
 
@@ -45,6 +46,7 @@ export default function EditProductDialog({ product, open, onClose, onUpdated }:
       price: Number(form.price),
       stock: Number(form.stock),
       imageUrl: form.imageUrl,
+      deliverable: form.deliverable,
     });
     toast.success("Produto atualizado!");
     onUpdated();
@@ -86,6 +88,15 @@ export default function EditProductDialog({ product, open, onClose, onUpdated }:
             <Label>URL da Imagem</Label>
             <Input value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} placeholder="https://..." />
           </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.deliverable}
+              onChange={(e) => setForm({ ...form, deliverable: e.target.checked })}
+              className="w-4 h-4 rounded border-border accent-primary"
+            />
+            <span className="text-sm font-medium">Produto com entrega disponível</span>
+          </label>
           <Button onClick={handleSave} className="w-full">Salvar Alterações</Button>
         </div>
       </DialogContent>

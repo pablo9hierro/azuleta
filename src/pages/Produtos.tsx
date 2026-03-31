@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, Plus, Pencil, Trash2, FileUp, Package, Search } from "lucide-react";
+import { Upload, Plus, Pencil, Trash2, FileUp, Package, Search, Truck } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Produtos() {
@@ -15,12 +15,10 @@ export default function Produtos() {
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [editOpen, setEditOpen] = useState(false);
 
-  // Manual form
   const [manualForm, setManualForm] = useState({
-    name: "", description: "", barcode: "", price: "", stock: "", imageUrl: "",
+    name: "", description: "", barcode: "", price: "", stock: "", imageUrl: "", deliverable: false,
   });
 
-  // XML
   const [xmlPreview, setXmlPreview] = useState<Omit<Product, "id" | "createdAt">[]>([]);
 
   const products = getProducts();
@@ -42,8 +40,9 @@ export default function Produtos() {
       price: parseFloat(manualForm.price) || 0,
       stock: parseInt(manualForm.stock) || 0,
       imageUrl: manualForm.imageUrl,
+      deliverable: manualForm.deliverable,
     });
-    setManualForm({ name: "", description: "", barcode: "", price: "", stock: "", imageUrl: "" });
+    setManualForm({ name: "", description: "", barcode: "", price: "", stock: "", imageUrl: "", deliverable: false });
     setRefresh((r) => r + 1);
     toast.success("Produto cadastrado!");
   };
@@ -103,13 +102,12 @@ export default function Produtos() {
             </TabsTrigger>
           </TabsList>
 
-          {/* XML Upload */}
           <TabsContent value="xml">
             <div className="bg-card rounded-xl border border-border p-6 space-y-4">
               <div>
                 <Label className="text-base font-semibold mb-2 block">Upload de Arquivo XML</Label>
                 <p className="text-sm text-muted-foreground mb-3">
-                  Envie o XML (NFe ou catálogo) para importar produtos automaticamente. Serão extraídos: nome, descrição e código de barras.
+                  Envie o XML (NFe ou catálogo) para importar produtos automaticamente.
                 </p>
                 <label className="flex flex-col items-center justify-center border-2 border-dashed border-border rounded-xl p-8 cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors">
                   <Upload size={40} className="text-muted-foreground mb-2" />
@@ -121,9 +119,7 @@ export default function Produtos() {
 
               {xmlPreview.length > 0 && (
                 <div className="space-y-3">
-                  <h3 className="font-semibold text-sm">
-                    {xmlPreview.length} produtos encontrados:
-                  </h3>
+                  <h3 className="font-semibold text-sm">{xmlPreview.length} produtos encontrados:</h3>
                   <div className="max-h-64 overflow-y-auto rounded-lg border border-border">
                     <table className="w-full text-sm">
                       <thead className="bg-muted sticky top-0">
@@ -156,7 +152,6 @@ export default function Produtos() {
             </div>
           </TabsContent>
 
-          {/* Manual Form */}
           <TabsContent value="manual">
             <div className="bg-card rounded-xl border border-border p-6 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -185,6 +180,16 @@ export default function Produtos() {
                   <Input value={manualForm.imageUrl} onChange={(e) => setManualForm({ ...manualForm, imageUrl: e.target.value })} placeholder="https://..." />
                 </div>
               </div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={manualForm.deliverable}
+                  onChange={(e) => setManualForm({ ...manualForm, deliverable: e.target.checked })}
+                  className="w-4 h-4 rounded border-border accent-primary"
+                />
+                <Truck size={14} className="text-primary" />
+                <span className="text-sm font-medium">Produto com entrega disponível</span>
+              </label>
               <Button onClick={handleManualAdd} className="gap-2">
                 <Plus size={16} /> Cadastrar Produto
               </Button>
@@ -217,6 +222,7 @@ export default function Produtos() {
                     <th className="text-left p-3 font-medium hidden md:table-cell">Cód. Barras</th>
                     <th className="text-right p-3 font-medium">Preço</th>
                     <th className="text-right p-3 font-medium">Estoque</th>
+                    <th className="text-center p-3 font-medium">Entrega</th>
                     <th className="text-center p-3 font-medium">Ações</th>
                   </tr>
                 </thead>
@@ -228,6 +234,13 @@ export default function Produtos() {
                       <td className="p-3 font-mono text-xs hidden md:table-cell">{product.barcode || "—"}</td>
                       <td className="p-3 text-right font-semibold">R$ {product.price.toFixed(2).replace(".", ",")}</td>
                       <td className="p-3 text-right">{product.stock}</td>
+                      <td className="p-3 text-center">
+                        {product.deliverable ? (
+                          <Truck size={16} className="inline text-primary" />
+                        ) : (
+                          <span className="text-muted-foreground text-xs">—</span>
+                        )}
+                      </td>
                       <td className="p-3">
                         <div className="flex items-center justify-center gap-1">
                           <button
@@ -250,7 +263,7 @@ export default function Produtos() {
                   ))}
                   {filtered.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="p-8 text-center text-muted-foreground">Nenhum produto encontrado.</td>
+                      <td colSpan={7} className="p-8 text-center text-muted-foreground">Nenhum produto encontrado.</td>
                     </tr>
                   )}
                 </tbody>
