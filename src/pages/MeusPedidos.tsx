@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   PackageSearch, Loader2, Receipt, Truck, CheckCircle2,
-  Clock, XCircle, Phone, User as UserIcon,
+  Clock, XCircle, Phone, User as UserIcon, LogOut,
 } from "lucide-react";
 import { useCustomer } from "@/contexts/CustomerContext";
 import {
@@ -36,7 +36,7 @@ function fmtDate(d: string) {
 }
 
 export default function MeusPedidos() {
-  const { customer, setCustomer } = useCustomer();
+  const { customer, setCustomer, clearCustomer } = useCustomer();
   const navigate = useNavigate();
 
   // dialog state
@@ -120,13 +120,19 @@ export default function MeusPedidos() {
             Meus Pedidos
           </h1>
           {customer && (
-            <div className="text-right">
-              <p className="text-sm font-semibold">{customer.name}</p>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 bg-muted/60 rounded-full px-3 py-1.5">
+                <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
+                  <UserIcon size={15} className="text-primary" />
+                </div>
+                <span className="text-sm font-semibold">{customer.name}</span>
+              </div>
               <button
-                onClick={() => { setCustomer(null); setDialogOpen(true); setIsRegisterMode(false); }}
-                className="text-xs text-muted-foreground hover:text-primary underline"
+                title="Sair"
+                onClick={() => { clearCustomer(); setOrders([]); setDialogOpen(true); setIsRegisterMode(false); }}
+                className="w-8 h-8 rounded-full bg-muted/60 hover:bg-destructive/10 flex items-center justify-center transition-colors group"
               >
-                Trocar conta
+                <LogOut size={15} className="text-muted-foreground group-hover:text-destructive" />
               </button>
             </div>
           )}
@@ -227,6 +233,8 @@ export default function MeusPedidos() {
                 <div className="relative">
                   <Phone size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <Input
+                    type="tel"
+                    inputMode="tel"
                     placeholder="(11) 99999-9999"
                     value={dialogPhone}
                     disabled={isRegisterMode}

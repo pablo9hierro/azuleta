@@ -416,8 +416,8 @@ export default function CartDrawer({ open, onClose, items, setItems }: CartDrawe
                       </label>
                       {wantsDelivery && (
                         <div className="mt-3 space-y-2 ml-6">
-                          <div><Label className="text-xs">CEP *</Label><Input placeholder="00000-000" value={deliveryForm.cep} onChange={(e) => setDeliveryForm({ ...deliveryForm, cep: e.target.value })} className="h-8 text-sm" /></div>
-                          <div><Label className="text-xs">Número *</Label><Input placeholder="123" value={deliveryForm.number} onChange={(e) => setDeliveryForm({ ...deliveryForm, number: e.target.value })} className="h-8 text-sm" /></div>
+                          <div><Label className="text-xs">CEP *</Label><Input placeholder="00000-000" inputMode="numeric" value={deliveryForm.cep} onChange={(e) => setDeliveryForm({ ...deliveryForm, cep: e.target.value })} className="h-8 text-sm" /></div>
+                          <div><Label className="text-xs">Número *</Label><Input placeholder="123" inputMode="numeric" value={deliveryForm.number} onChange={(e) => setDeliveryForm({ ...deliveryForm, number: e.target.value })} className="h-8 text-sm" /></div>
                           <div><Label className="text-xs">Referência</Label><Input placeholder="Próximo ao mercado..." value={deliveryForm.reference} onChange={(e) => setDeliveryForm({ ...deliveryForm, reference: e.target.value })} className="h-8 text-sm" /></div>
                         </div>
                       )}
@@ -468,6 +468,8 @@ export default function CartDrawer({ open, onClose, items, setItems }: CartDrawe
                 <div className="relative">
                   <Phone size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <Input
+                    type="tel"
+                    inputMode="tel"
                     placeholder="(11) 99999-9999"
                     value={customerForm.phone}
                     onChange={(e) => { setCustomerForm({ ...customerForm, phone: fmtPhone(e.target.value) }); setCustomerErrors({ ...customerErrors, phone: undefined }); }}
@@ -560,6 +562,7 @@ export default function CartDrawer({ open, onClose, items, setItems }: CartDrawe
                   <Label className="text-xs">Número do Cartão *</Label>
                   <Input
                     placeholder="0000 0000 0000 0000"
+                    inputMode="numeric"
                     value={cardForm.number}
                     onChange={(e) => { setCardForm({ ...cardForm, number: fmtCard(e.target.value) }); setCardErrors({ ...cardErrors, number: undefined }); }}
                     className={`h-10 text-sm tracking-widest ${cardErrors.number ? "border-destructive" : ""}`}
@@ -581,6 +584,7 @@ export default function CartDrawer({ open, onClose, items, setItems }: CartDrawe
                     <Label className="text-xs">Validade *</Label>
                     <Input
                       placeholder="MM/AA"
+                      inputMode="numeric"
                       value={cardForm.expiry}
                       onChange={(e) => { setCardForm({ ...cardForm, expiry: fmtExpiry(e.target.value) }); setCardErrors({ ...cardErrors, expiry: undefined }); }}
                       className={`h-10 text-sm ${cardErrors.expiry ? "border-destructive" : ""}`}
@@ -592,6 +596,7 @@ export default function CartDrawer({ open, onClose, items, setItems }: CartDrawe
                     <Input
                       placeholder="000"
                       type="password"
+                      inputMode="numeric"
                       maxLength={4}
                       value={cardForm.cvv}
                       onChange={(e) => { setCardForm({ ...cardForm, cvv: e.target.value.replace(/\D/g, "").slice(0, 4) }); setCardErrors({ ...cardErrors, cvv: undefined }); }}
