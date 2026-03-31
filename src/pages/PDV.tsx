@@ -68,22 +68,10 @@ export default function PDV() {
     toast.success(`${product.name} adicionado`, { duration: 1500 });
   }, []);
 
-  const startScanner = useCallback(async () => {
-    try {
-      const { Html5Qrcode } = await import("html5-qrcode");
-      const scanner = new Html5Qrcode("barcode-reader");
-      html5QrCodeRef.current = scanner;
-      await scanner.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 280, height: 120 } },
-        (decodedText: string) => { addByBarcode(decodedText); },
-        () => {}
-      );
-      setScanning(true);
-    } catch {
-      toast.error("Camera nao disponivel. Use a entrada manual.");
-    }
-  }, [addByBarcode]);
+  // Step 1: just flip the flag so React re-renders the div as visible
+  const startScanner = useCallback(() => {
+    setScanning(true);
+  }, []);
 
   const stopScanner = useCallback(async () => {
     if (html5QrCodeRef.current) {
@@ -93,6 +81,36 @@ export default function PDV() {
     setScanning(false);
   }, []);
 
+  // Step 2: after the div is visible (scanning === true), actually start the camera
+  useEffect(() => {
+    if (!scanning) return;
+    let cancelled = false;
+
+    const initScanner = async () => {
+      try {
+        const { Html5Qrcode } = await import("html5-qrcode");
+        if (cancelled) return;
+        const scanner = new Html5Qrcode("barcode-reader");
+        html5QrCodeRef.current = scanner;
+        await scanner.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 280, height: 120 } },
+          (decodedText: string) => { addByBarcode(decodedText); },
+          () => {}
+        );
+      } catch {
+        if (!cancelled) {
+          toast.error("Câmera não disponível. Use a entrada manual.");
+          setScanning(false);
+        }
+      }
+    };
+
+    initScanner();
+    return () => { cancelled = true; };
+  }, [scanning, addByBarcode]);
+
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (html5QrCodeRef.current) { html5QrCodeRef.current.stop().catch(() => {}); }
