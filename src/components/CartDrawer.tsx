@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Minus, Plus, Trash2, QrCode, CreditCard, MapPin, Truck,
-  Loader2, ExternalLink, RefreshCw, AlertCircle, CheckCircle2, ShoppingBag,
+  Loader2, ExternalLink, RefreshCw, AlertCircle, CheckCircle2, ShoppingBag, Copy, Check,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import type { Product } from "@/data/store";
@@ -35,6 +35,18 @@ interface CartDrawerProps {
 type PaymentMethod = "pix" | "credit" | "debit";
 type Step = "cart" | "pix-loading" | "pix-qrcode" | "card-form" | "card-processing";
 
+interface ReceiptSnapshot {
+  items: { name: string; quantity: number; unitPrice: number }[];
+  total: number;
+  paymentMethod: PaymentMethod;
+  installments: string;
+  wantsDelivery: boolean;
+  deliveryCep: string;
+  deliveryNumber: string;
+  deliveryReference: string;
+  paidAt: string;
+}
+
 interface CardForm {
   number: string;
   name: string;
@@ -62,6 +74,8 @@ export default function CartDrawer({ open, onClose, items, setItems }: CartDrawe
   const [cardForm, setCardForm] = useState<CardForm>({ number: "", name: "", expiry: "", cvv: "", installments: "1" });
   const [cardErrors, setCardErrors] = useState<Partial<CardForm>>({});
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const receiptSnapshotRef = useRef<ReceiptSnapshot | null>(null);
+  const [pixCopied, setPixCopied] = useState(false);
 
   const total = items.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
   const hasDeliverableItem = items.some((i) => i.product.deliverable);
@@ -136,8 +150,29 @@ export default function CartDrawer({ open, onClose, items, setItems }: CartDrawe
     handleClose();
   };
 
+  const handleCopyPixUrl = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setPixCopied(true);
+      setTimeout(() => setPixCopied(false), 2500);
+    } catch {
+      toast.error("Não foi possível copiar. Copie o link manualmente.");
+    }
+  };
+
   const handlePixCheckout = async () => {
     if (!validateDelivery()) return;
+    receiptSnapshotRef.current = {
+      items: items.map((i) => ({ name: i.product.name, quantity: i.quantity, unitPrice: i.product.price })),
+      total,
+      paymentMethod: "pix",
+      installments: "1",
+      wantsDelivery,
+      deliveryCep: deliveryForm.cep,
+      deliveryNumber: deliveryForm.number,
+      deliveryReference: deliveryForm.reference,
+      paidAt: new Date().toLocaleString("pt-BR"),
+    };
     setStep("pix-loading");
     try {
       const sale = createSale("pix");
@@ -202,6 +237,17 @@ export default function CartDrawer({ open, onClose, items, setItems }: CartDrawe
   const handleCardSubmit = async () => {
     if (!validateCard()) return;
     if (!validateDelivery()) return;
+    receiptSnapshotRef.current = {
+      items: items.map((i) => ({ name: i.product.name, quantity: i.quantity, unitPrice: i.product.price })),
+      total,
+      paymentMethod,
+      installments: cardForm.installments,
+      wantsDelivery,
+      deliveryCep: deliveryForm.cep,
+      deliveryNumber: deliveryForm.number,
+      deliveryReference: deliveryForm.reference,
+      paidAt: new Date().toLocaleString("pt-BR"),
+    };
     setStep("card-processing");
     const sale = createSale(paymentMethod as "credit" | "debit");
     await new Promise((r) => setTimeout(r, 2500));
@@ -338,10 +384,24 @@ export default function CartDrawer({ open, onClose, items, setItems }: CartDrawe
                 <p className="text-xs text-muted-foreground text-center">Escaneie com o app do banco para pagar via PIX</p>
               </div>
 
-              <div className="bg-muted/40 rounded-lg p-3 text-center">
-                <p className="text-xs text-muted-foreground mb-1">Ou acesse o link de pagamento:</p>
-                <a href={pixBilling.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline break-all">
-                  <ExternalLink size={11} />{pixBilling.url}
+              <div className="bg-muted/40 rounded-lg p-3 space-y-2">
+                <p className="text-xs text-muted-foreground text-center">Ou copie a chave PIX e cole no app do banco:</p>
+                <div className="flex gap-2 items-center">
+                  <div className="flex-1 bg-background border border-border rounded-md px-2 py-1.5 text-[11px] text-muted-foreground font-mono break-all leading-tight select-all">
+                    {pixBilling.url}
+                  </div>
+                  <button
+                    onClick={() => handleCopyPixUrl(pixBilling.url)}
+                    className={`shrink-0 flex flex-col items-center gap-0.5 px-2.5 py-2 rounded-lg border text-xs font-semibold transition-all ${
+                      pixCopied ? "border-green-500 bg-green-50 text-green-700" : "border-primary bg-primary/5 text-primary hover:bg-primary/10"
+                    }`}
+                  >
+                    {pixCopied ? <Check size={16} /> : <Copy size={16} />}
+                    <span className="text-[10px]">{pixCopied ? "Copiado!" : "Copiar"}</span>
+                  </button>
+                </div>
+                <a href={pixBilling.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                  <ExternalLink size={11} /> Abrir link no navegador
                 </a>
               </div>
 
@@ -451,29 +511,92 @@ export default function CartDrawer({ open, onClose, items, setItems }: CartDrawe
         </SheetContent>
       </Sheet>
 
-      {/* ── SUCCESS DIALOG ── */}
+      {/* ── SUCCESS DIALOG / COMPROVANTE ── */}
       <Dialog open={!!successOrder} onOpenChange={(v) => { if (!v) handleSuccessClose(); }}>
-        <DialogContent className="sm:max-w-sm text-center">
-          <div className="flex flex-col items-center gap-4 py-4">
-            <div className="w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-              <CheckCircle2 size={44} className="text-green-600" />
-            </div>
-            <div>
-              <h2 className="text-2xl font-extrabold text-green-700 dark:text-green-400">Pagamento Confirmado!</h2>
-              <p className="text-muted-foreground text-sm mt-1">Obrigado pela sua compra na Azuzão da Construção!</p>
-            </div>
-            <div className="bg-muted rounded-xl px-6 py-3 space-y-0.5">
-              <p className="text-xs text-muted-foreground">Código do Pedido</p>
-              <p className="text-3xl font-black tracking-widest text-primary">{orderCode}</p>
-            </div>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <ShoppingBag size={16} />
-              <span>Guarde este código para acompanhar seu pedido</span>
-            </div>
-            <Button onClick={handleSuccessClose} className="w-full gap-2 mt-2" size="lg">
-              <CheckCircle2 size={18} /> Fechar
-            </Button>
-          </div>
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+          {(() => {
+            const r = receiptSnapshotRef.current;
+            const methodLabel: Record<PaymentMethod, string> = { pix: "PIX", credit: "Cartão de Crédito", debit: "Cartão de Débito" };
+            return (
+              <div className="flex flex-col gap-4 py-2">
+                {/* Header */}
+                <div className="flex flex-col items-center gap-2 text-center">
+                  <div className="w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                    <CheckCircle2 size={36} className="text-green-600" />
+                  </div>
+                  <h2 className="text-xl font-extrabold text-green-700 dark:text-green-400">Pagamento Confirmado!</h2>
+                  <p className="text-muted-foreground text-sm">Obrigado pela sua compra na Azuzão da Construção!</p>
+                </div>
+
+                {/* Comprovante box */}
+                <div className="border border-border rounded-xl overflow-hidden text-sm">
+                  {/* Código e data */}
+                  <div className="bg-primary/5 px-4 py-3 flex items-center justify-between">
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Código do Pedido</p>
+                      <p className="text-2xl font-black tracking-widest text-primary">{orderCode}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Data</p>
+                      <p className="text-xs font-medium">{r?.paidAt ?? new Date().toLocaleString("pt-BR")}</p>
+                    </div>
+                  </div>
+
+                  {/* Itens */}
+                  <div className="px-4 py-3 space-y-1.5 border-t border-border">
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2">Itens</p>
+                    {r?.items.map((item, idx) => (
+                      <div key={idx} className="flex justify-between gap-2">
+                        <span className="flex-1 text-xs">
+                          <span className="font-semibold text-foreground">{item.quantity}×</span>{" "}
+                          {item.name}
+                        </span>
+                        <span className="text-xs text-muted-foreground shrink-0">{fmtBRL(item.unitPrice * item.quantity)}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Pagamento + Total */}
+                  <div className="px-4 py-3 space-y-1.5 border-t border-border bg-muted/30">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">Método</span>
+                      <span className="font-medium">{r ? methodLabel[r.paymentMethod] : "—"}</span>
+                    </div>
+                    {r?.paymentMethod === "credit" && r.installments !== "1" && (
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Parcelas</span>
+                        <span className="font-medium">{r.installments}× de {fmtBRL((r.total) / Number(r.installments))}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-base font-bold pt-1 border-t border-border">
+                      <span>Total</span>
+                      <span className="text-primary">{fmtBRL(r?.total ?? 0)}</span>
+                    </div>
+                  </div>
+
+                  {/* Entrega */}
+                  {r?.wantsDelivery && (
+                    <div className="px-4 py-3 border-t border-border space-y-1">
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                        <Truck size={11} /> Endereço de Entrega
+                      </p>
+                      <p className="text-xs">CEP: <span className="font-medium">{r.deliveryCep}</span> — Nº <span className="font-medium">{r.deliveryNumber}</span></p>
+                      {r.deliveryReference && <p className="text-xs text-muted-foreground">Ref: {r.deliveryReference}</p>}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 text-xs text-muted-foreground justify-center">
+                  <ShoppingBag size={13} />
+                  <span>Guarde o código do pedido para acompanhamento</span>
+                </div>
+
+                <Button onClick={handleSuccessClose} className="w-full gap-2" size="lg">
+                  <CheckCircle2 size={18} /> Fechar Comprovante
+                </Button>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </>
