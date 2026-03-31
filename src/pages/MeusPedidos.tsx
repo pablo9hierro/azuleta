@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   PackageSearch, Loader2, Receipt, Truck, CheckCircle2,
-  Clock, XCircle, Phone, User as UserIcon, LogOut,
+  XCircle, Phone, User as UserIcon, LogOut,
 } from "lucide-react";
 import { useCustomer } from "@/contexts/CustomerContext";
 import {
@@ -20,9 +20,12 @@ import { toast } from "sonner";
 
 const statusLabel: Record<string, { label: string; icon: React.ElementType; color: string }> = {
   paid: { label: "Pago", icon: CheckCircle2, color: "text-green-600" },
-  pending: { label: "Aguardando", icon: Clock, color: "text-yellow-600" },
   cancelled: { label: "Cancelado", icon: XCircle, color: "text-destructive" },
 };
+
+function getStatus(status: string) {
+  return statusLabel[status] ?? { label: "Pago", icon: CheckCircle2, color: "text-green-600" };
+}
 
 const methodLabel: Record<string, string> = {
   pix: "PIX",
@@ -49,6 +52,7 @@ export default function MeusPedidos() {
   // orders
   const [orders, setOrders] = useState<SaleRow[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<SaleRow | null>(null);
 
   const fmtPhone = (v: string) => {
     const d = v.replace(/\D/g, "").slice(0, 11);
@@ -153,11 +157,15 @@ export default function MeusPedidos() {
           ) : (
             <div className="space-y-4">
               {orders.map((order) => {
-                const st = statusLabel[order.status] ?? statusLabel.pending;
+                const st = getStatus(order.status);
                 const Icon = st.icon;
                 const code = "#" + order.id.slice(-4).toUpperCase().padStart(4, "0");
                 return (
-                  <div key={order.id} className="border border-border rounded-xl overflow-hidden">
+                  <button
+                    key={order.id}
+                    onClick={() => setSelectedOrder(order)}
+                    className="w-full text-left border border-border rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-sm transition-all"
+                  >
                     {/* Header */}
                     <div className="bg-muted/40 px-4 py-3 flex items-center justify-between flex-wrap gap-2">
                       <div>
@@ -201,13 +209,69 @@ export default function MeusPedidos() {
                         {order.delivery_reference ? ` — ${order.delivery_reference}` : ""}
                       </div>
                     )}
-                  </div>
+                  </button>
                 );
               })}
             </div>
           )
         )}
       </div>
+
+      {/* Order detail dialog */}
+      {selectedOrder && (() => {
+        const st = getStatus(selectedOrder.status);
+        const Icon = st.icon;
+        const code = "#" + selectedOrder.id.slice(-4).toUpperCase().padStart(4, "0");
+        return (
+          <Dialog open={!!selectedOrder} onOpenChange={(v) => { if (!v) setSelectedOrder(null); }}>
+            <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Pedido</p>
+                    <p className="text-2xl font-black text-primary">{code}</p>
+                  </div>
+                  <p className={`text-sm font-semibold flex items-center gap-1 ${st.color}`}>
+                    <Icon size={16} /> {st.label}
+                  </p>
+                </div>
+                <p className="text-xs text-muted-foreground">{fmtDate(selectedOrder.created_at)}</p>
+
+                <div className="border border-border rounded-lg overflow-hidden">
+                  <div className="px-3 py-2 bg-muted/40 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Itens</div>
+                  <div className="divide-y divide-border">
+                    {(selectedOrder.sale_items ?? []).map((item) => (
+                      <div key={item.id} className="px-3 py-2 flex justify-between text-sm">
+                        <span>
+                          <span className="font-semibold">{item.quantity}×</span> {item.product_name}
+                        </span>
+                        <span className="shrink-0 text-muted-foreground">{fmtBRL(Number(item.unit_price) * item.quantity)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="px-3 py-2 border-t border-border bg-muted/20 flex justify-between font-bold text-base">
+                    <span>Total</span>
+                    <span className="text-primary">{fmtBRL(Number(selectedOrder.total))}</span>
+                  </div>
+                </div>
+
+                <div className="text-sm text-muted-foreground space-y-1">
+                  <p><span className="font-medium text-foreground">Pagamento:</span> {methodLabel[selectedOrder.payment_method] ?? selectedOrder.payment_method}</p>
+                  {selectedOrder.delivery_requested && (
+                    <p className="flex items-center gap-1.5">
+                      <Truck size={13} />
+                      CEP {selectedOrder.delivery_cep}, nº {selectedOrder.delivery_number}
+                      {selectedOrder.delivery_reference ? ` — ${selectedOrder.delivery_reference}` : ""}
+                    </p>
+                  )}
+                </div>
+
+                <Button className="w-full" onClick={() => setSelectedOrder(null)}>Fechar</Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
 
       {/* Identification dialog */}
       <Dialog open={dialogOpen} onOpenChange={(v) => { if (!v) navigate("/"); }}>

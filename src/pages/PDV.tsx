@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect, useRef, useCallback } from "react";
 import Layout from "@/components/Layout";
 import PDVPaymentModal, { type PDVPaymentMethod } from "@/components/PDVPaymentModal";
-import { getProductByBarcode, addSale } from "@/data/store";
+import { getProductByBarcode, getProducts, addSale } from "@/data/store";
 import type { Product } from "@/data/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +30,10 @@ export default function PDV() {
   const [manualBarcode, setManualBarcode] = useState("");
   const [scanning, setScanning] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
+  const [nameMatches, setNameMatches] = useState<Product[]>([]);
+  const [customTotal, setCustomTotal] = useState<number | null>(null);
+  const [editingTotal, setEditingTotal] = useState(false);
+  const [customTotalInput, setCustomTotalInput] = useState("");
   const scannerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const html5QrCodeRef = useRef<any>(null);
@@ -37,25 +41,10 @@ export default function PDV() {
   const lastScannedTimeRef = useRef<number>(0);
 
   const total = items.reduce((s, i) => s + i.product.price * i.quantity, 0);
+  const finalTotal = customTotal ?? total;
   const totalItems = items.reduce((s, i) => s + i.quantity, 0);
 
-  const addByBarcode = useCallback((barcode: string) => {
-    const code = barcode.trim();
-    if (!code) return;
-
-    // Debounce: ignore same code within 1.5s
-    const now = Date.now();
-    if (code === lastScannedRef.current && now - lastScannedTimeRef.current < 1500) {
-      return;
-    }
-    lastScannedRef.current = code;
-    lastScannedTimeRef.current = now;
-
-    const product = getProductByBarcode(code);
-    if (!product) {
-      toast.error(`Produto nao encontrado: ${code}`, { duration: 2000 });
-      return;
-    }
+  const addProductToCart = useCallback((product: Product) => {
     setItems((prev) => {
       const existing = prev.find((i) => i.product.id === product.id);
       if (existing) {
@@ -67,6 +56,26 @@ export default function PDV() {
     });
     toast.success(`${product.name} adicionado`, { duration: 1500 });
   }, []);
+
+  const addByBarcode = useCallback((barcode: string) => {
+    const code = barcode.trim();
+    if (!code) return;
+
+    // Debounce: ignore same code within 4s (prevents re-scan while camera stays pointed)
+    const now = Date.now();
+    if (code === lastScannedRef.current && now - lastScannedTimeRef.current < 4000) {
+      return;
+    }
+    lastScannedRef.current = code;
+    lastScannedTimeRef.current = now;
+
+    const product = getProductByBarcode(code);
+    if (!product) {
+      toast.error(`Produto nao encontrado: ${code}`, { duration: 2000 });
+      return;
+    }
+    addProductToCart(product);
+  }, [addProductToCart]);
 
   // Step 1: just flip the flag so React re-renders the div as visible
   const startScanner = useCallback(() => {
@@ -130,9 +139,33 @@ export default function PDV() {
   };
 
   const handleManualAdd = () => {
-    if (!manualBarcode.trim()) return;
-    addByBarcode(manualBarcode);
-    setManualBarcode("");
+    const input = manualBarcode.trim();
+    if (!input) return;
+
+    // Try exact barcode first
+    const byBarcode = getProductByBarcode(input);
+    if (byBarcode) {
+      addByBarcode(input);
+      setManualBarcode("");
+      setNameMatches([]);
+      return;
+    }
+
+    // Try name search
+    const allProducts = getProducts();
+    const matches = allProducts.filter((p) =>
+      p.name.toLowerCase().includes(input.toLowerCase())
+    );
+    if (matches.length === 1) {
+      addProductToCart(matches[0]);
+      setManualBarcode("");
+      setNameMatches([]);
+    } else if (matches.length > 1) {
+      setNameMatches(matches);
+    } else {
+      toast.error(`Produto não encontrado: ${input}`, { duration: 2000 });
+      setNameMatches([]);
+    }
   };
 
   const handleFinalize = () => {
@@ -149,7 +182,7 @@ export default function PDV() {
         quantity: i.quantity,
         unitPrice: i.product.price,
       })),
-      total,
+      total: finalTotal,
       paymentMethod: method,
       status: "paid",
     });
@@ -161,11 +194,12 @@ export default function PDV() {
     };
 
     toast.success(
-      `Venda #${sale.id} finalizada! ${methodLabel[method]} - R$ ${total.toFixed(2).replace(".", ",")}`,
+      `Venda #${sale.id} finalizada! ${methodLabel[method]} - R$ ${finalTotal.toFixed(2).replace(".", ",")}`,
       { duration: 4000 }
     );
 
     setItems([]);
+    setCustomTotal(null);
     setPaymentOpen(false);
   };
 
@@ -220,9 +254,9 @@ export default function PDV() {
             <div className="relative flex-1">
               <Keyboard size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Digitar codigo de barras..."
+                placeholder="Código de barras ou nome do produto..."
                 value={manualBarcode}
-                onChange={(e) => setManualBarcode(e.target.value)}
+                onChange={(e) => { setManualBarcode(e.target.value); if (!e.target.value.trim()) setNameMatches([]); }}
                 onKeyDown={(e) => e.key === "Enter" && handleManualAdd()}
                 className="pl-9 h-9 text-sm"
               />
@@ -232,6 +266,26 @@ export default function PDV() {
               Adicionar
             </Button>
           </div>
+          {/* Name search results */}
+          {nameMatches.length > 1 && (
+            <div className="border border-border rounded-lg overflow-hidden bg-card shadow-md">
+              <p className="text-xs text-muted-foreground px-3 py-1.5 bg-muted/40 border-b border-border">
+                {nameMatches.length} produtos encontrados — escolha:
+              </p>
+              <div className="max-h-40 overflow-y-auto divide-y divide-border">
+                {nameMatches.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => { addProductToCart(p); setManualBarcode(""); setNameMatches([]); }}
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-muted/50 text-left"
+                  >
+                    <span className="font-medium truncate">{p.name}</span>
+                    <span className="text-xs text-muted-foreground shrink-0 ml-2">R$ {p.price.toFixed(2).replace(".", ",")}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Cart */}
@@ -297,9 +351,48 @@ export default function PDV() {
                 <span>Subtotal ({totalItems} {totalItems === 1 ? "item" : "itens"})</span>
                 <span>R$ {total.toFixed(2).replace(".", ",")}</span>
               </div>
-              <div className="flex justify-between text-xl font-extrabold border-t border-border pt-2">
+              <div className="flex justify-between items-center text-xl font-extrabold border-t border-border pt-2">
                 <span>Total</span>
-                <span className="text-primary">R$ {total.toFixed(2).replace(".", ",")}</span>
+                {editingTotal ? (
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={customTotalInput}
+                      onChange={(e) => setCustomTotalInput(e.target.value)}
+                      className="w-28 h-8 text-right text-base"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") { const v = parseFloat(customTotalInput); if (!isNaN(v) && v >= 0) setCustomTotal(v); setEditingTotal(false); }
+                        if (e.key === "Escape") setEditingTotal(false);
+                      }}
+                    />
+                    <Button size="sm" className="h-8 px-3" onClick={() => { const v = parseFloat(customTotalInput); if (!isNaN(v) && v >= 0) setCustomTotal(v); setEditingTotal(false); }}>OK</Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className={customTotal !== null ? "text-accent" : "text-primary"}>
+                      R$ {finalTotal.toFixed(2).replace(".", ",")}
+                    </span>
+                    <button
+                      onClick={() => { setCustomTotalInput(finalTotal.toFixed(2)); setEditingTotal(true); }}
+                      className="text-xs text-primary/70 hover:text-primary underline font-normal"
+                      title="Editar valor total"
+                    >
+                      Editar
+                    </button>
+                    {customTotal !== null && (
+                      <button
+                        onClick={() => setCustomTotal(null)}
+                        className="text-xs text-muted-foreground hover:text-destructive"
+                        title="Restaurar valor calculado"
+                      >
+                        ↩
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             <div className="grid grid-cols-3 gap-2 text-center text-xs text-muted-foreground">
@@ -328,7 +421,7 @@ export default function PDV() {
         open={paymentOpen}
         onClose={() => setPaymentOpen(false)}
         items={cartRows}
-        total={total}
+        total={finalTotal}
         onConfirm={handlePaymentConfirm}
       />
     </Layout>

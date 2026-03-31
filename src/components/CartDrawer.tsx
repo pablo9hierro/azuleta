@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Minus, Plus, Trash2, QrCode, CreditCard, MapPin, Truck,
-  Loader2, ExternalLink, RefreshCw, AlertCircle, CheckCircle2, ShoppingBag, Copy, Check, Phone,
+  Loader2, ExternalLink, RefreshCw, AlertCircle, CheckCircle2, ShoppingBag, Copy, Check, Phone, X,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import type { Product } from "@/data/store";
@@ -19,7 +19,7 @@ import {
   type AbacateBilling,
   type AbacateProduct,
 } from "@/lib/abacatepay";
-import { saveSaleToSupabase, upsertCustomer } from "@/lib/supabase";
+import { saveSaleToSupabase, upsertCustomer, getCustomerByPhone } from "@/lib/supabase";
 import { useCustomer } from "@/contexts/CustomerContext";
 import { toast } from "sonner";
 
@@ -33,6 +33,7 @@ interface CartDrawerProps {
   onClose: () => void;
   items: CartItem[];
   setItems: React.Dispatch<React.SetStateAction<CartItem[]>>;
+  inline?: boolean;
 }
 
 type PaymentMethod = "pix" | "credit" | "debit";
@@ -79,7 +80,7 @@ function fmtPhone(v: string) {
   return d;
 }
 
-export default function CartDrawer({ open, onClose, items, setItems }: CartDrawerProps) {
+export default function CartDrawer({ open, onClose, items, setItems, inline }: CartDrawerProps) {
   const { customer, setCustomer } = useCustomer();
   const navigate = useNavigate();
   const [step, setStep] = useState<Step>("cart");
@@ -146,7 +147,7 @@ export default function CartDrawer({ open, onClose, items, setItems }: CartDrawe
   const createSale = (method: PaymentMethod, custName?: string) =>
     addSale({
       products: items.map((i) => ({ productId: i.product.id, name: i.product.name, quantity: i.quantity, unitPrice: i.product.price })),
-      total, paymentMethod: method, status: "pending",
+      total, paymentMethod: method, status: "paid",
       customerName: custName ?? customer?.name,
       deliveryRequested: wantsDelivery,
       deliveryCep: wantsDelivery ? deliveryForm.cep : undefined,
@@ -210,7 +211,7 @@ export default function CartDrawer({ open, onClose, items, setItems }: CartDrawe
       saveSaleToSupabase({
         total,
         paymentMethod: "pix",
-        status: "pending",
+        status: "paid",
         customerName: custName,
         customerPhone: custPhone,
         deliveryRequested: wantsDelivery,
@@ -272,10 +273,15 @@ export default function CartDrawer({ open, onClose, items, setItems }: CartDrawe
     setCustomerSaving(true);
     try {
       const rawPhone = customerForm.phone.replace(/\D/g, "");
-      await upsertCustomer(customerForm.name.trim(), rawPhone);
-      setCustomer({ name: customerForm.name.trim(), phone: rawPhone });
+      // Check if customer exists first to avoid RLS upsert conflicts
+      const existing = await getCustomerByPhone(rawPhone);
+      if (!existing) {
+        await upsertCustomer(customerForm.name.trim(), rawPhone);
+      }
+      const finalName = existing?.name ?? customerForm.name.trim();
+      setCustomer({ name: finalName, phone: rawPhone });
       if (paymentMethod === "pix") {
-        await doPixCheckout(customerForm.name.trim(), rawPhone);
+        await doPixCheckout(finalName, rawPhone);
       } else {
         setStep("card-form");
       }
@@ -342,20 +348,47 @@ export default function CartDrawer({ open, onClose, items, setItems }: CartDrawe
 
   const orderCode = successOrder ? "#" + successOrder.slice(-4).toUpperCase().padStart(4, "0") : "";
 
-  return (
-    <>
+  const stepTitle = (
+    step === "cart" ? "Carrinho"
+    : step === "customer-id" ? "Identificação"
+    : step === "pix-loading" ? "Gerando PIX..."
+    : step === "pix-qrcode" ? "Pague via PIX"
+    : step === "card-form" ? `Pagamento com ${paymentMethod === "credit" ? "Crédito" : "Débito"}`
+    : "Processando..."
+  );
+
+  const wrapContent = (children: React.ReactNode) => {
+    if (inline) {
+      return (
+        <div className="flex flex-col h-full w-full bg-background">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+            <span className="text-base font-semibold">{stepTitle}</span>
+            {step !== "card-processing" && (
+              <button onClick={handleClose} className="w-8 h-8 rounded-md hover:bg-muted flex items-center justify-center">
+                <X size={16} />
+              </button>
+            )}
+          </div>
+          <div className="flex flex-col flex-1 overflow-hidden px-6 pb-6">{children}</div>
+        </div>
+      );
+    }
+    return (
       <Sheet open={open} onOpenChange={(v) => { if (!v && step !== "card-processing") handleClose(); }}>
         <SheetContent className="flex flex-col w-full sm:max-w-md">
           <SheetHeader>
-            <SheetTitle>
-              {step === "cart" && "Carrinho"}
-              {step === "customer-id" && "Identificação"}
-              {step === "pix-loading" && "Gerando PIX..."}
-              {step === "pix-qrcode" && "Pague via PIX"}
-              {step === "card-form" && `Pagamento com ${paymentMethod === "credit" ? "Crédito" : "Débito"}`}
-              {step === "card-processing" && "Processando..."}
-            </SheetTitle>
+            <SheetTitle>{stepTitle}</SheetTitle>
           </SheetHeader>
+          {children}
+        </SheetContent>
+      </Sheet>
+    );
+  };
+
+  return (
+    <>
+      {wrapContent(
+        <>
 
           {/* ── CART STEP ── */}
           {step === "cart" && (
@@ -643,8 +676,8 @@ export default function CartDrawer({ open, onClose, items, setItems }: CartDrawe
               <p className="text-sm text-muted-foreground">Processando pagamento...</p>
             </div>
           )}
-        </SheetContent>
-      </Sheet>
+        </>
+      )}
 
       {/* ── SUCCESS DIALOG / COMPROVANTE ── */}
       <Dialog open={!!successOrder} onOpenChange={(v) => { if (!v) handleSuccessClose(); }}>

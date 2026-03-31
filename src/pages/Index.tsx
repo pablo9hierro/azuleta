@@ -3,13 +3,16 @@ import Layout from "@/components/Layout";
 import ProductCard from "@/components/ProductCard";
 import CartDrawer, { type CartItem } from "@/components/CartDrawer";
 import { getProducts, type Product } from "@/data/store";
-import { ShoppingCart, Search } from "lucide-react";
+import { ShoppingCart, Search, PackageSearch } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
 
 export default function Index() {
   const [search, setSearch] = useState("");
   const [cartOpen, setCartOpen] = useState(false);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const navigate = useNavigate();
 
   const products = useMemo(() => getProducts(), []);
   const filtered = products.filter(
@@ -46,50 +49,69 @@ export default function Index() {
 
   return (
     <Layout>
-      <div className="container mx-auto px-4 py-6 pb-24 md:pb-6">
-        {/* Hero */}
-        <div className="bg-primary rounded-2xl p-6 md:p-10 mb-8 text-primary-foreground">
-          <h1 className="text-2xl md:text-4xl font-extrabold mb-2">Azuzão da Construção</h1>
-          <p className="text-primary-foreground/70 text-sm md:text-base">
-            Materiais de construção com os melhores preços. Compre sem cadastro!
-          </p>
-        </div>
-
-        {/* Search */}
-        <div className="flex items-center gap-3 mb-6">
-          <div className="relative flex-1">
-            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Buscar produtos..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10"
-            />
+      <div className={`flex ${cartOpen ? "md:flex-row" : ""} min-h-0`}>
+        {/* Main content */}
+        <div className={`flex-1 min-w-0 container mx-auto px-4 py-6 pb-24 md:pb-6 ${cartOpen ? "md:max-w-[60%] md:mx-0" : ""}`}>
+          {/* Hero */}
+          <div className="bg-primary rounded-2xl p-6 md:p-10 mb-8 text-primary-foreground">
+            <h1 className="text-2xl md:text-4xl font-extrabold mb-2">Azuzão da Construção</h1>
+            <p className="text-primary-foreground/70 text-sm md:text-base mb-4">
+              Materiais de construção com os melhores preços. Compre sem cadastro!
+            </p>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="gap-2"
+              onClick={() => navigate("/meus-pedidos")}
+            >
+              <PackageSearch size={16} />
+              Meus Pedidos
+            </Button>
           </div>
+
+          {/* Search */}
+          <div className="flex items-center gap-3 mb-6">
+            <div className="relative flex-1">
+              <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Buscar produtos..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+          </div>
+
+          {/* Products */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            {filtered.map((product) => (
+              <ProductCard
+                key={product.id}
+                product={product}
+                quantity={getQuantity(product.id)}
+                onAdd={addToCart}
+                onRemove={removeFromCart}
+              />
+            ))}
+          </div>
+
+          {filtered.length === 0 && (
+            <p className="text-center text-muted-foreground py-20">Nenhum produto encontrado.</p>
+          )}
         </div>
 
-        {/* Products */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-          {filtered.map((product) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              quantity={getQuantity(product.id)}
-              onAdd={addToCart}
-              onRemove={removeFromCart}
-            />
-          ))}
-        </div>
-
-        {filtered.length === 0 && (
-          <p className="text-center text-muted-foreground py-20">Nenhum produto encontrado.</p>
+        {/* Cart: inline panel on desktop when open, Sheet on mobile */}
+        {cartOpen && (
+          <div className="hidden md:flex md:w-[40%] md:max-w-md md:min-w-[320px] md:border-l md:border-border md:sticky md:top-[64px] md:h-[calc(100vh-64px)] md:overflow-hidden">
+            <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)} items={cartItems} setItems={setCartItems} inline />
+          </div>
         )}
       </div>
 
-      {/* Floating cart button - always visible */}
+      {/* Floating cart button — always visible on mobile */}
       <button
         onClick={() => setCartOpen(true)}
-        className="fixed bottom-20 right-4 md:bottom-6 md:right-6 z-50 bg-primary text-primary-foreground p-4 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all active:scale-95"
+        className={`fixed bottom-20 right-4 md:bottom-6 md:right-6 z-50 bg-primary text-primary-foreground p-4 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all active:scale-95 ${cartOpen ? "md:hidden" : ""}`}
       >
         <ShoppingCart size={24} />
         {cartCount > 0 && (
@@ -99,7 +121,10 @@ export default function Index() {
         )}
       </button>
 
-      <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)} items={cartItems} setItems={setCartItems} />
+      {/* Mobile cart (Sheet) */}
+      <div className="md:hidden">
+        <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)} items={cartItems} setItems={setCartItems} />
+      </div>
     </Layout>
   );
 }
