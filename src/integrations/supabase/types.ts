@@ -14,7 +14,126 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      products: {
+        Row: {
+          barcode: string | null
+          created_at: string
+          deliverable: boolean
+          description: string
+          id: string
+          image_url: string | null
+          name: string
+          price: number
+          stock: number
+        }
+        Insert: {
+          barcode?: string | null
+          created_at?: string
+          deliverable?: boolean
+          description?: string
+          id?: string
+          image_url?: string | null
+          name: string
+          price?: number
+          stock?: number
+        }
+        Update: {
+          barcode?: string | null
+          created_at?: string
+          deliverable?: boolean
+          description?: string
+          id?: string
+          image_url?: string | null
+          name?: string
+          price?: number
+          stock?: number
+        }
+        Relationships: []
+      }
+      sale_items: {
+        Row: {
+          created_at: string
+          id: string
+          product_id: string
+          product_name: string
+          quantity: number
+          sale_id: string
+          unit_price: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          product_id: string
+          product_name: string
+          quantity?: number
+          sale_id: string
+          unit_price?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          product_id?: string
+          product_name?: string
+          quantity?: number
+          sale_id?: string
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sale_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_items_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: false
+            referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sales: {
+        Row: {
+          created_at: string
+          customer_name: string | null
+          delivery_cep: string | null
+          delivery_number: string | null
+          delivery_reference: string | null
+          delivery_requested: boolean
+          id: string
+          payment_method: string
+          status: string
+          total: number
+        }
+        Insert: {
+          created_at?: string
+          customer_name?: string | null
+          delivery_cep?: string | null
+          delivery_number?: string | null
+          delivery_reference?: string | null
+          delivery_requested?: boolean
+          id?: string
+          payment_method?: string
+          status?: string
+          total?: number
+        }
+        Update: {
+          created_at?: string
+          customer_name?: string | null
+          delivery_cep?: string | null
+          delivery_number?: string | null
+          delivery_reference?: string | null
+          delivery_requested?: boolean
+          id?: string
+          payment_method?: string
+          status?: string
+          total?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
