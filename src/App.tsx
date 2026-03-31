@@ -7,6 +7,7 @@ import Produtos from "./pages/Produtos";
 import PDV from "./pages/PDV";
 import Relatorios from "./pages/Relatorios";
 import NotFound from "./pages/NotFound";
+import TestBarcode from "./pages/TestBarcode";
 
 const queryClient = new QueryClient();
 
@@ -20,6 +21,7 @@ const App = () => (
           <Route path="/produtos" element={<Produtos />} />
           <Route path="/pdv" element={<PDV />} />
           <Route path="/relatorios" element={<Relatorios />} />
+          <Route path="/test-barcode" element={<TestBarcode />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

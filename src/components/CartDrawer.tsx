@@ -1,11 +1,23 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Minus, Plus, Trash2, QrCode, CreditCard, MapPin, Store, Truck } from "lucide-react";
+import {
+  Minus, Plus, Trash2, QrCode, CreditCard, MapPin, Truck,
+  Loader2, ExternalLink, RefreshCw, AlertCircle, CheckCircle2, ShoppingBag,
+} from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import type { Product } from "@/data/store";
-import { addSale, createBilling } from "@/data/store";
+import { addSale } from "@/data/store";
+import {
+  createAbacateBilling,
+  getAbacateBilling,
+  isAbacatePayConfigured,
+  type AbacateBilling,
+  type AbacateProduct,
+} from "@/lib/abacatepay";
 import { toast } from "sonner";
 
 export interface CartItem {
@@ -20,24 +32,66 @@ interface CartDrawerProps {
   setItems: React.Dispatch<React.SetStateAction<CartItem[]>>;
 }
 
-type PaymentMethod = "pix" | "credit" | "debit" | "local";
+type PaymentMethod = "pix" | "credit" | "debit";
+type Step = "cart" | "pix-loading" | "pix-qrcode" | "card-form" | "card-processing";
 
-const paymentOptions: { value: PaymentMethod; label: string; icon: React.ElementType; desc: string }[] = [
-  { value: "pix", label: "PIX", icon: QrCode, desc: "QR Code instantâneo" },
-  { value: "credit", label: "Crédito", icon: CreditCard, desc: "Cartão de crédito" },
-  { value: "debit", label: "Débito", icon: CreditCard, desc: "Cartão de débito" },
-  { value: "local", label: "No Local", icon: Store, desc: "Pagar na loja" },
-];
+interface CardForm {
+  number: string;
+  name: string;
+  expiry: string;
+  cvv: string;
+  installments: string;
+}
+
+function fmtCard(v: string) {
+  return v.replace(/\D/g, "").slice(0, 16).replace(/(.{4})/g, "$1 ").trim();
+}
+function fmtExpiry(v: string) {
+  const d = v.replace(/\D/g, "").slice(0, 4);
+  if (d.length > 2) return d.slice(0, 2) + "/" + d.slice(2);
+  return d;
+}
 
 export default function CartDrawer({ open, onClose, items, setItems }: CartDrawerProps) {
+  const [step, setStep] = useState<Step>("cart");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pix");
   const [wantsDelivery, setWantsDelivery] = useState(false);
   const [deliveryForm, setDeliveryForm] = useState({ cep: "", number: "", reference: "" });
+  const [pixBilling, setPixBilling] = useState<AbacateBilling | null>(null);
+  const [successOrder, setSuccessOrder] = useState<string | null>(null);
+  const [cardForm, setCardForm] = useState<CardForm>({ number: "", name: "", expiry: "", cvv: "", installments: "1" });
+  const [cardErrors, setCardErrors] = useState<Partial<CardForm>>({});
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const total = items.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
-
-  // Check if at least one item qualifies for delivery
   const hasDeliverableItem = items.some((i) => i.product.deliverable);
+
+  useEffect(() => {
+    if (!open) {
+      stopPolling();
+      setStep("cart");
+      setPixBilling(null);
+      setSuccessOrder(null);
+      setCardForm({ number: "", name: "", expiry: "", cvv: "", installments: "1" });
+      setCardErrors({});
+    }
+  }, [open]);
+
+  const stopPolling = () => {
+    if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
+  };
+
+  const startPolling = (billingId: string, saleId: string) => {
+    stopPolling();
+    pollingRef.current = setInterval(async () => {
+      try {
+        const updated = await getAbacateBilling(billingId);
+        if (updated.status === "PAID") { stopPolling(); setSuccessOrder(saleId); }
+      } catch { /* ignore */ }
+    }, 3000);
+  };
+
+  const fmtBRL = (v: number) => "R$ " + v.toFixed(2).replace(".", ",");
 
   const updateQty = (productId: string, delta: number) => {
     setItems((prev) =>
@@ -47,191 +101,381 @@ export default function CartDrawer({ open, onClose, items, setItems }: CartDrawe
     );
   };
 
-  const handleCheckout = () => {
-    if (items.length === 0) return;
-
+  const validateDelivery = () => {
     if (wantsDelivery && (!deliveryForm.cep.trim() || !deliveryForm.number.trim())) {
-      toast.error("Preencha o CEP e número para entrega");
-      return;
+      toast.error("Preencha o CEP e numero para entrega"); return false;
     }
+    return true;
+  };
 
-    const sale = addSale({
-      products: items.map((i) => ({
-        productId: i.product.id,
-        name: i.product.name,
-        quantity: i.quantity,
-        unitPrice: i.product.price,
-      })),
-      total,
-      paymentMethod,
-      status: paymentMethod === "local" ? "pending" : "pending",
+  const createSale = (method: PaymentMethod) =>
+    addSale({
+      products: items.map((i) => ({ productId: i.product.id, name: i.product.name, quantity: i.quantity, unitPrice: i.product.price })),
+      total, paymentMethod: method, status: "pending",
       deliveryRequested: wantsDelivery,
       deliveryCep: wantsDelivery ? deliveryForm.cep : undefined,
       deliveryNumber: wantsDelivery ? deliveryForm.number : undefined,
       deliveryReference: wantsDelivery ? deliveryForm.reference : undefined,
     });
 
-    if (paymentMethod === "pix") {
-      const billing = createBilling(
-        sale.id,
-        total,
-        items.map((i) => ({
-          externalId: i.product.id,
-          name: i.product.name,
-          description: i.product.description,
-          quantity: i.quantity,
-          price: i.product.price * 100,
-        }))
-      );
-      toast.success("QR Code PIX gerado! Redirecionando...", {
-        description: `Billing: ${billing.id} (mock)`,
-      });
-    } else if (paymentMethod === "local") {
-      toast.success("Pedido criado! Pague ao retirar na loja.", {
-        description: `Pedido: ${sale.id}`,
-      });
-    } else {
-      toast.success("Pagamento processado!", {
-        description: `Pedido: ${sale.id} via ${paymentMethod === "credit" ? "crédito" : "débito"} (mock)`,
-      });
-    }
-
+  const handleClose = () => {
+    stopPolling();
     setItems([]);
     setWantsDelivery(false);
     setDeliveryForm({ cep: "", number: "", reference: "" });
+    setPixBilling(null);
+    setStep("cart");
+    setSuccessOrder(null);
+    setCardForm({ number: "", name: "", expiry: "", cvv: "", installments: "1" });
+    setCardErrors({});
     onClose();
   };
 
+  const handleSuccessClose = () => {
+    toast.success("Obrigado pela compra! 🎉");
+    handleClose();
+  };
+
+  const handlePixCheckout = async () => {
+    if (!validateDelivery()) return;
+    setStep("pix-loading");
+    try {
+      const sale = createSale("pix");
+      let billing: AbacateBilling;
+      if (isAbacatePayConfigured()) {
+        const abacateProducts: AbacateProduct[] = items.map((i) => ({
+          externalId: i.product.id,
+          name: i.product.name,
+          description: i.product.description || i.product.name,
+          quantity: i.quantity,
+          price: Math.round(i.product.price * 100),
+        }));
+        billing = await createAbacateBilling({
+          products: abacateProducts,
+          returnUrl: window.location.origin,
+          completionUrl: `${window.location.origin}/?pedido=${sale.id}&pago=true`,
+        });
+        startPolling(billing.id, sale.id);
+      } else {
+        billing = {
+          id: `demo_${sale.id}`,
+          url: `${window.location.origin}/?pedido=${sale.id}&demo_pix=true`,
+          amount: Math.round(total * 100),
+          status: "PENDING",
+          devMode: true,
+          methods: ["PIX"],
+          products: items.map((i) => ({
+            externalId: i.product.id,
+            name: i.product.name,
+            description: i.product.description,
+            quantity: i.quantity,
+            price: Math.round(i.product.price * 100),
+          })),
+          frequency: "ONE_TIME",
+          returnUrl: window.location.origin,
+          completionUrl: `${window.location.origin}/?pedido=${sale.id}`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        setTimeout(() => setSuccessOrder(sale.id), 8000);
+      }
+      setPixBilling(billing);
+      setStep("pix-qrcode");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro ao gerar PIX";
+      toast.error("Erro AbacatePay: " + msg);
+      setStep("cart");
+    }
+  };
+
+  const validateCard = (): boolean => {
+    const errs: Partial<CardForm> = {};
+    const digits = cardForm.number.replace(/\D/g, "");
+    if (digits.length < 13) errs.number = "Número inválido";
+    if (!cardForm.name.trim()) errs.name = "Nome obrigatório";
+    if (cardForm.expiry.length < 5) errs.expiry = "Validade inválida";
+    if (cardForm.cvv.length < 3) errs.cvv = "CVV inválido";
+    setCardErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const handleCardSubmit = async () => {
+    if (!validateCard()) return;
+    if (!validateDelivery()) return;
+    setStep("card-processing");
+    const sale = createSale(paymentMethod as "credit" | "debit");
+    await new Promise((r) => setTimeout(r, 2500));
+    setSuccessOrder(sale.id);
+  };
+
+  const orderCode = successOrder ? "#" + successOrder.slice(-4).toUpperCase().padStart(4, "0") : "";
+
   return (
-    <Sheet open={open} onOpenChange={onClose}>
-      <SheetContent className="flex flex-col">
-        <SheetHeader>
-          <SheetTitle>Carrinho</SheetTitle>
-        </SheetHeader>
+    <>
+      <Sheet open={open} onOpenChange={(v) => { if (!v && step !== "card-processing") handleClose(); }}>
+        <SheetContent className="flex flex-col w-full sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>
+              {step === "cart" && "Carrinho"}
+              {step === "pix-loading" && "Gerando PIX..."}
+              {step === "pix-qrcode" && "Pague via PIX"}
+              {step === "card-form" && `Pagamento com ${paymentMethod === "credit" ? "Crédito" : "Débito"}`}
+              {step === "card-processing" && "Processando..."}
+            </SheetTitle>
+          </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto space-y-3 py-4">
-          {items.length === 0 && (
-            <p className="text-center text-muted-foreground text-sm py-10">Carrinho vazio</p>
-          )}
-          {items.map((item) => (
-            <div key={item.product.id} className="flex items-center gap-3 bg-muted/50 rounded-lg p-3">
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{item.product.name}</p>
-                <p className="text-xs text-muted-foreground">
-                  R$ {item.product.price.toFixed(2).replace(".", ",")}
-                </p>
-                {item.product.deliverable && (
-                  <span className="text-[10px] text-primary font-medium flex items-center gap-0.5 mt-0.5">
-                    <Truck size={10} /> Entrega disponível
-                  </span>
+          {/* ── CART STEP ── */}
+          {step === "cart" && (
+            <div className="flex flex-col flex-1 overflow-hidden">
+              <div className="flex-1 overflow-y-auto space-y-3 py-4">
+                {items.length === 0 && (
+                  <p className="text-center text-muted-foreground text-sm py-10">Carrinho vazio</p>
                 )}
-              </div>
-              <div className="flex items-center gap-1">
-                <button onClick={() => updateQty(item.product.id, -1)} className="p-1 rounded hover:bg-muted">
-                  <Minus size={14} />
-                </button>
-                <span className="text-sm font-semibold w-6 text-center">{item.quantity}</span>
-                <button onClick={() => updateQty(item.product.id, 1)} className="p-1 rounded hover:bg-muted">
-                  <Plus size={14} />
-                </button>
-                <button onClick={() => updateQty(item.product.id, -item.quantity)} className="p-1 rounded hover:bg-muted text-destructive ml-1">
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {items.length > 0 && (
-          <div className="border-t border-border pt-4 space-y-4 pb-4 overflow-y-auto">
-            {/* Payment method selection */}
-            <div>
-              <Label className="text-xs font-semibold text-muted-foreground mb-2 block">Método de Pagamento</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {paymentOptions.map((opt) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setPaymentMethod(opt.value)}
-                    className={`flex items-center gap-2 p-2.5 rounded-lg border text-left text-sm transition-all ${
-                      paymentMethod === opt.value
-                        ? "border-primary bg-primary/5 text-primary font-semibold"
-                        : "border-border hover:border-muted-foreground/30"
-                    }`}
-                  >
-                    <opt.icon size={16} />
-                    <div>
-                      <p className="font-medium text-xs">{opt.label}</p>
-                      <p className="text-[10px] text-muted-foreground">{opt.desc}</p>
+                {items.map((item) => (
+                  <div key={item.product.id} className="flex items-center gap-3 bg-muted/50 rounded-lg p-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{item.product.name}</p>
+                      <p className="text-xs text-muted-foreground">{fmtBRL(item.product.price)}</p>
+                      {item.product.deliverable && (
+                        <span className="text-[10px] text-primary font-medium flex items-center gap-0.5 mt-0.5">
+                          <Truck size={10} /> Entrega disponível
+                        </span>
+                      )}
                     </div>
-                  </button>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => updateQty(item.product.id, -1)} className="p-1 rounded hover:bg-muted"><Minus size={14} /></button>
+                      <span className="text-sm font-semibold w-6 text-center">{item.quantity}</span>
+                      <button onClick={() => updateQty(item.product.id, 1)} className="p-1 rounded hover:bg-muted"><Plus size={14} /></button>
+                      <button onClick={() => updateQty(item.product.id, -item.quantity)} className="p-1 rounded hover:bg-muted text-destructive ml-1"><Trash2 size={14} /></button>
+                    </div>
+                  </div>
                 ))}
               </div>
+
+              {items.length > 0 && (
+                <div className="border-t border-border pt-4 space-y-4 pb-4 overflow-y-auto">
+                  {/* Payment methods */}
+                  <div>
+                    <Label className="text-xs font-semibold text-muted-foreground mb-2 block">Método de Pagamento</Label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(["pix", "credit", "debit"] as PaymentMethod[]).map((m) => (
+                        <button
+                          key={m}
+                          onClick={() => setPaymentMethod(m)}
+                          className={`flex flex-col items-center gap-1 p-2.5 rounded-lg border text-center text-sm transition-all ${
+                            paymentMethod === m ? "border-primary bg-primary/5 text-primary font-semibold" : "border-border hover:border-muted-foreground/30"
+                          }`}
+                        >
+                          {m === "pix" ? <QrCode size={18} /> : <CreditCard size={18} />}
+                          <span className="text-xs font-medium">{m === "pix" ? "PIX" : m === "credit" ? "Crédito" : "Débito"}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Delivery */}
+                  {hasDeliverableItem && (
+                    <div>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={wantsDelivery} onChange={(e) => setWantsDelivery(e.target.checked)} className="w-4 h-4 accent-primary" />
+                        <MapPin size={14} className="text-primary" />
+                        <span className="text-sm font-medium">Quero receber em casa</span>
+                      </label>
+                      {wantsDelivery && (
+                        <div className="mt-3 space-y-2 ml-6">
+                          <div><Label className="text-xs">CEP *</Label><Input placeholder="00000-000" value={deliveryForm.cep} onChange={(e) => setDeliveryForm({ ...deliveryForm, cep: e.target.value })} className="h-8 text-sm" /></div>
+                          <div><Label className="text-xs">Número *</Label><Input placeholder="123" value={deliveryForm.number} onChange={(e) => setDeliveryForm({ ...deliveryForm, number: e.target.value })} className="h-8 text-sm" /></div>
+                          <div><Label className="text-xs">Referência</Label><Input placeholder="Próximo ao mercado..." value={deliveryForm.reference} onChange={(e) => setDeliveryForm({ ...deliveryForm, reference: e.target.value })} className="h-8 text-sm" /></div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex justify-between text-lg font-bold">
+                    <span>Total</span>
+                    <span className="text-primary">{fmtBRL(total)}</span>
+                  </div>
+
+                  {paymentMethod === "pix" ? (
+                    <Button onClick={handlePixCheckout} className="w-full gap-2" size="lg">
+                      <QrCode size={18} /> Gerar QR Code PIX
+                    </Button>
+                  ) : (
+                    <Button onClick={() => { if (validateDelivery()) setStep("card-form"); }} className="w-full gap-2" size="lg">
+                      <CreditCard size={18} /> Pagar com {paymentMethod === "credit" ? "Crédito" : "Débito"}
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
+          )}
 
-            {/* Delivery option */}
-            {hasDeliverableItem && (
-              <div>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={wantsDelivery}
-                    onChange={(e) => setWantsDelivery(e.target.checked)}
-                    className="w-4 h-4 rounded border-border accent-primary"
-                  />
-                  <MapPin size={14} className="text-primary" />
-                  <span className="text-sm font-medium">Quero receber em casa</span>
-                </label>
-                <p className="text-[10px] text-muted-foreground ml-6 mt-0.5">
-                  Apenas itens com entrega disponível serão enviados. Frete pago.
+          {/* ── PIX LOADING ── */}
+          {step === "pix-loading" && (
+            <div className="flex flex-col items-center justify-center flex-1 gap-4">
+              <Loader2 size={48} className="animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Gerando cobrança PIX...</p>
+            </div>
+          )}
+
+          {/* ── PIX QR CODE ── */}
+          {step === "pix-qrcode" && pixBilling && (
+            <div className="flex flex-col flex-1 overflow-y-auto space-y-4 py-4">
+              <div className="text-center space-y-1">
+                <p className="font-bold text-base flex items-center justify-center gap-2">
+                  <QrCode size={18} className="text-green-600" /> QR Code PIX gerado!
                 </p>
+                <p className="text-2xl font-extrabold text-primary">{fmtBRL(total)}</p>
+                {pixBilling.devMode && (
+                  <span className="inline-block bg-yellow-100 text-yellow-700 text-[10px] font-bold px-2 py-0.5 rounded-full">MODO DEMONSTRAÇÃO</span>
+                )}
+              </div>
 
-                {wantsDelivery && (
-                  <div className="mt-3 space-y-2 ml-6">
-                    <div>
-                      <Label className="text-xs">CEP *</Label>
-                      <Input
-                        placeholder="00000-000"
-                        value={deliveryForm.cep}
-                        onChange={(e) => setDeliveryForm({ ...deliveryForm, cep: e.target.value })}
-                        className="h-8 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs">Número da Casa *</Label>
-                      <Input
-                        placeholder="123"
-                        value={deliveryForm.number}
-                        onChange={(e) => setDeliveryForm({ ...deliveryForm, number: e.target.value })}
-                        className="h-8 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs">Referência (opcional)</Label>
-                      <Input
-                        placeholder="Próximo ao mercado..."
-                        value={deliveryForm.reference}
-                        onChange={(e) => setDeliveryForm({ ...deliveryForm, reference: e.target.value })}
-                        className="h-8 text-sm"
-                      />
-                    </div>
+              <div className="flex flex-col items-center gap-2">
+                <div className="bg-white border-4 border-primary rounded-2xl p-2 shadow-md">
+                  <QRCodeSVG value={pixBilling.url} size={200} level="M" includeMargin={false} />
+                </div>
+                <p className="text-xs text-muted-foreground text-center">Escaneie com o app do banco para pagar via PIX</p>
+              </div>
+
+              <div className="bg-muted/40 rounded-lg p-3 text-center">
+                <p className="text-xs text-muted-foreground mb-1">Ou acesse o link de pagamento:</p>
+                <a href={pixBilling.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline break-all">
+                  <ExternalLink size={11} />{pixBilling.url}
+                </a>
+              </div>
+
+              {!isAbacatePayConfigured() && (
+                <div className="flex items-center gap-2 text-xs text-yellow-600 bg-yellow-50 dark:bg-yellow-950/30 p-2 rounded-lg">
+                  <AlertCircle size={14} /> Configure VITE_ABACATEPAY_API_KEY para cobranças reais
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 p-2 rounded-lg">
+                <Loader2 size={13} className="animate-spin" />
+                Aguardando confirmação do pagamento...
+              </div>
+
+              <Button variant="outline" size="sm" onClick={() => setStep("cart")} className="gap-1 text-xs">
+                <RefreshCw size={13} /> Voltar ao carrinho
+              </Button>
+            </div>
+          )}
+
+          {/* ── CARD FORM ── */}
+          {step === "card-form" && (
+            <div className="flex flex-col flex-1 overflow-y-auto space-y-4 py-4">
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-xs">Número do Cartão *</Label>
+                  <Input
+                    placeholder="0000 0000 0000 0000"
+                    value={cardForm.number}
+                    onChange={(e) => { setCardForm({ ...cardForm, number: fmtCard(e.target.value) }); setCardErrors({ ...cardErrors, number: undefined }); }}
+                    className={`h-10 text-sm tracking-widest ${cardErrors.number ? "border-destructive" : ""}`}
+                  />
+                  {cardErrors.number && <p className="text-xs text-destructive mt-0.5">{cardErrors.number}</p>}
+                </div>
+                <div>
+                  <Label className="text-xs">Nome no Cartão *</Label>
+                  <Input
+                    placeholder="NOME COMPLETO"
+                    value={cardForm.name}
+                    onChange={(e) => { setCardForm({ ...cardForm, name: e.target.value.toUpperCase() }); setCardErrors({ ...cardErrors, name: undefined }); }}
+                    className={`h-10 text-sm ${cardErrors.name ? "border-destructive" : ""}`}
+                  />
+                  {cardErrors.name && <p className="text-xs text-destructive mt-0.5">{cardErrors.name}</p>}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Validade *</Label>
+                    <Input
+                      placeholder="MM/AA"
+                      value={cardForm.expiry}
+                      onChange={(e) => { setCardForm({ ...cardForm, expiry: fmtExpiry(e.target.value) }); setCardErrors({ ...cardErrors, expiry: undefined }); }}
+                      className={`h-10 text-sm ${cardErrors.expiry ? "border-destructive" : ""}`}
+                    />
+                    {cardErrors.expiry && <p className="text-xs text-destructive mt-0.5">{cardErrors.expiry}</p>}
+                  </div>
+                  <div>
+                    <Label className="text-xs">CVV *</Label>
+                    <Input
+                      placeholder="000"
+                      type="password"
+                      maxLength={4}
+                      value={cardForm.cvv}
+                      onChange={(e) => { setCardForm({ ...cardForm, cvv: e.target.value.replace(/\D/g, "").slice(0, 4) }); setCardErrors({ ...cardErrors, cvv: undefined }); }}
+                      className={`h-10 text-sm ${cardErrors.cvv ? "border-destructive" : ""}`}
+                    />
+                    {cardErrors.cvv && <p className="text-xs text-destructive mt-0.5">{cardErrors.cvv}</p>}
+                  </div>
+                </div>
+                {paymentMethod === "credit" && (
+                  <div>
+                    <Label className="text-xs">Parcelas</Label>
+                    <select
+                      value={cardForm.installments}
+                      onChange={(e) => setCardForm({ ...cardForm, installments: e.target.value })}
+                      className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                    >
+                      {[1, 2, 3, 6, 12].map((n) => (
+                        <option key={n} value={String(n)}>
+                          {n}x {n === 1 ? "sem juros" : `de ${fmtBRL(total / n)}`}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 )}
               </div>
-            )}
 
-            <div className="flex justify-between text-lg font-bold">
-              <span>Total</span>
-              <span className="text-primary">R$ {total.toFixed(2).replace(".", ",")}</span>
+              <div className="flex justify-between text-lg font-bold pt-2">
+                <span>Total</span>
+                <span className="text-primary">{fmtBRL(total)}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Button variant="outline" onClick={() => setStep("cart")}>Voltar</Button>
+                <Button onClick={handleCardSubmit} className="gap-2">
+                  <CreditCard size={16} /> Confirmar
+                </Button>
+              </div>
             </div>
-            <Button onClick={handleCheckout} className="w-full gap-2" size="lg">
-              {paymentMethod === "pix" && <><QrCode size={18} /> Gerar QR Code PIX</>}
-              {paymentMethod === "credit" && <><CreditCard size={18} /> Pagar com Crédito</>}
-              {paymentMethod === "debit" && <><CreditCard size={18} /> Pagar com Débito</>}
-              {paymentMethod === "local" && <><Store size={18} /> Confirmar Pedido</>}
+          )}
+
+          {/* ── CARD PROCESSING ── */}
+          {step === "card-processing" && (
+            <div className="flex flex-col items-center justify-center flex-1 gap-4">
+              <Loader2 size={48} className="animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Processando pagamento...</p>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* ── SUCCESS DIALOG ── */}
+      <Dialog open={!!successOrder} onOpenChange={(v) => { if (!v) handleSuccessClose(); }}>
+        <DialogContent className="sm:max-w-sm text-center">
+          <div className="flex flex-col items-center gap-4 py-4">
+            <div className="w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+              <CheckCircle2 size={44} className="text-green-600" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-extrabold text-green-700 dark:text-green-400">Pagamento Confirmado!</h2>
+              <p className="text-muted-foreground text-sm mt-1">Obrigado pela sua compra na Azuzão da Construção!</p>
+            </div>
+            <div className="bg-muted rounded-xl px-6 py-3 space-y-0.5">
+              <p className="text-xs text-muted-foreground">Código do Pedido</p>
+              <p className="text-3xl font-black tracking-widest text-primary">{orderCode}</p>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <ShoppingBag size={16} />
+              <span>Guarde este código para acompanhar seu pedido</span>
+            </div>
+            <Button onClick={handleSuccessClose} className="w-full gap-2 mt-2" size="lg">
+              <CheckCircle2 size={18} /> Fechar
             </Button>
           </div>
-        )}
-      </SheetContent>
-    </Sheet>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
