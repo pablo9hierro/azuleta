@@ -146,46 +146,30 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     if (error) { toast.error("Erro: " + error); } else if (emailSent) { setRegEmailSent(true); }
   };
 
-  const desktopNavItems = user ? [...publicNavItems, ...lojistaNavItems] : publicNavItems;
+  const desktopNavItems = user ? lojistaNavItems : publicNavItems;
 
   return (
     <div className="min-h-screen flex flex-col">
       {/* Top nav */}
       <header className="bg-primary text-primary-foreground sticky top-0 z-50 shadow-lg">
         <div className="container mx-auto flex items-center justify-between px-4 py-3">
-          {/* Left: logo + user icon */}
+          {/* Left: A logo — clickable auth/profile hub */}
           <div className="flex items-center gap-2">
-            {/* User icon / customer pill — shows on left */}
-            {!user && !customer && (
-              <button
-                onClick={() => openModal("cliente")}
-                className="w-9 h-9 rounded-full bg-primary-foreground/10 hover:bg-primary-foreground/20 flex items-center justify-center transition-colors"
-                title="Entrar / Meus Pedidos"
-              >
-                <User size={18} className="text-primary-foreground/80" />
-              </button>
-            )}
-            {customer && !user && (
-              <button
-                onClick={() => openModal("cliente")}
-                className="flex items-center gap-1.5 bg-primary-foreground/10 hover:bg-primary-foreground/20 rounded-full px-2.5 py-1.5 transition-colors"
-                title="Minha conta"
-              >
-                <div className="w-6 h-6 rounded-full bg-accent flex items-center justify-center shrink-0">
-                  <User size={12} className="text-accent-foreground" />
-                </div>
-                <span className="text-sm font-semibold text-primary-foreground hidden sm:inline max-w-[90px] truncate">
-                  {customer.name.split(" ")[0]}
-                </span>
-              </button>
-            )}
-
-            <Link to="/" className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                if (!user && !customer) {
+                  openModal("cliente");
+                } else {
+                  openModal(user ? "lojista" : "cliente");
+                }
+              }}
+              className="flex items-center gap-2"
+            >
               <div className="w-9 h-9 rounded-lg bg-accent flex items-center justify-center font-extrabold text-accent-foreground text-lg">
                 A
               </div>
               <span className="font-extrabold text-lg hidden sm:inline">Azuzão da Construção</span>
-            </Link>
+            </button>
           </div>
 
           <nav className="flex items-center gap-1">
@@ -220,18 +204,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 <span className="hidden md:inline">Meus Pedidos</span>
               </Link>
             )}
-
-            {user && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleSignOut}
-                className="text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/10 gap-1.5"
-              >
-                <LogOut size={16} />
-                <span className="hidden md:inline">Sair</span>
-              </Button>
-            )}
           </nav>
         </div>
       </header>
@@ -242,7 +214,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* Mobile bottom nav */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50">
         <div className="flex justify-around py-2">
-          {publicNavItems.map((item) => {
+          {!user && publicNavItems.map((item) => {
             const active = location.pathname === item.to;
             return (
               <Link
@@ -292,11 +264,30 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* ── Unified Auth Modal ─────────────────────────────────────────────── */}
       <Dialog open={authModalOpen} onOpenChange={setAuthModalOpen}>
         <DialogContent className="sm:max-w-sm max-h-[90vh] overflow-y-auto">
+          {/* Lojista already logged in — show nav + logout */}
+          {user ? (
+            <div className="space-y-4 py-2">
+              <div className="flex items-center gap-3 bg-muted/50 rounded-lg p-3">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <HardHat size={18} className="text-primary" />
+                </div>
+                <p className="font-semibold">Lojista</p>
+              </div>
+              {lojistaNavItems.map((item) => (
+                <Button key={item.to} variant="outline" className="w-full gap-2 justify-start" onClick={() => { setAuthModalOpen(false); navigate(item.to); }}>
+                  <item.icon size={16} /> {item.label}
+                </Button>
+              ))}
+              <Button variant="outline" className="w-full gap-2 text-destructive hover:text-destructive" onClick={() => { setAuthModalOpen(false); handleSignOut(); }}>
+                <LogOut size={16} /> Sair
+              </Button>
+            </div>
+          ) : (
           <Tabs value={authTab} onValueChange={(v) => setAuthTab(v as typeof authTab)}>
-            <TabsList className="grid grid-cols-3 w-full mb-4">
+            <TabsList className={`grid w-full mb-4 ${customer ? "grid-cols-2" : "grid-cols-3"}`}>
               <TabsTrigger value="cliente">Cliente</TabsTrigger>
               <TabsTrigger value="lojista">Lojista</TabsTrigger>
-              <TabsTrigger value="register">Criar conta</TabsTrigger>
+              {!customer && <TabsTrigger value="register">Criar conta</TabsTrigger>}
             </TabsList>
 
             {/* ── CLIENTE TAB ── */}
@@ -440,6 +431,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               )}
             </TabsContent>
           </Tabs>
+          )}
         </DialogContent>
       </Dialog>
     </div>

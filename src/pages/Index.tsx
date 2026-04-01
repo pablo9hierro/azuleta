@@ -51,7 +51,7 @@ export default function Index() {
     <Layout>
       <div className={`flex ${cartOpen ? "md:flex-row" : ""} min-h-0`}>
         {/* Main content */}
-        <div className={`flex-1 min-w-0 container mx-auto px-4 py-6 pb-24 md:pb-6 ${cartOpen ? "md:max-w-[60%] md:mx-0" : ""}`}>
+        <div className={`flex-1 min-w-0 container mx-auto px-4 py-6 pb-24 md:pb-6 ${cartOpen ? "md:max-w-[40%] md:mx-0" : ""}`}>
           {/* Hero */}
           <div className="bg-primary rounded-2xl p-6 md:p-10 mb-8 text-primary-foreground">
             <h1 className="text-2xl md:text-4xl font-extrabold mb-2">Azuzão da Construção</h1>
@@ -102,7 +102,7 @@ export default function Index() {
 
         {/* Cart: inline panel on desktop when open, Sheet on mobile */}
         {cartOpen && (
-          <div className="hidden md:flex md:w-[40%] md:max-w-md md:min-w-[320px] md:border-l md:border-border md:sticky md:top-[64px] md:h-[calc(100vh-64px)] md:overflow-hidden">
+          <div className="hidden md:flex md:w-[60%] md:max-w-none md:min-w-[320px] md:border-l md:border-border md:sticky md:top-[64px] md:h-[calc(100vh-64px)] md:overflow-hidden">
             <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)} items={cartItems} setItems={setCartItems} inline />
           </div>
         )}

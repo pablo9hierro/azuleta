@@ -113,11 +113,9 @@ export default function Relatorios() {
                       <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
                         sale.status === "paid"
                           ? "bg-success/10 text-success"
-                          : sale.status === "pending"
-                          ? "bg-warning/10 text-warning"
                           : "bg-destructive/10 text-destructive"
                       }`}>
-                        {sale.status === "paid" ? "Pago" : sale.status === "pending" ? "Pendente" : "Cancelado"}
+                        {sale.status === "paid" ? "Pago" : "Cancelado"}
                       </span>
                     </td>
                     <td className="p-3 text-right font-semibold">R$ {sale.total.toFixed(2).replace(".", ",")}</td>

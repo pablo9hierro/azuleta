@@ -18,7 +18,7 @@ export interface Sale {
   products: { productId: string; name: string; quantity: number; unitPrice: number }[];
   total: number;
   paymentMethod: "pix" | "credit" | "debit" | "local";
-  status: "pending" | "paid" | "cancelled";
+  status: "paid" | "cancelled";
   createdAt: string;
   customerName?: string;
   deliveryRequested?: boolean;
@@ -144,7 +144,7 @@ let sales: Sale[] = [
     ],
     total: 79.50,
     paymentMethod: "debit",
-    status: "pending",
+    status: "paid",
     createdAt: "2024-03-15T11:00:00Z",
   },
 ];

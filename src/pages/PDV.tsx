@@ -38,7 +38,6 @@ export default function PDV() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const html5QrCodeRef = useRef<any>(null);
   const lastScannedRef = useRef<string>("");
-  const lastScannedTimeRef = useRef<number>(0);
 
   const total = items.reduce((s, i) => s + i.product.price * i.quantity, 0);
   const finalTotal = customTotal ?? total;
@@ -61,13 +60,9 @@ export default function PDV() {
     const code = barcode.trim();
     if (!code) return;
 
-    // Debounce: ignore same code within 4s (prevents re-scan while camera stays pointed)
-    const now = Date.now();
-    if (code === lastScannedRef.current && now - lastScannedTimeRef.current < 4000) {
-      return;
-    }
+    // Permanent lock: ignore same barcode until a DIFFERENT code is scanned
+    if (code === lastScannedRef.current) return;
     lastScannedRef.current = code;
-    lastScannedTimeRef.current = now;
 
     const product = getProductByBarcode(code);
     if (!product) {
@@ -256,7 +251,17 @@ export default function PDV() {
               <Input
                 placeholder="Código de barras ou nome do produto..."
                 value={manualBarcode}
-                onChange={(e) => { setManualBarcode(e.target.value); if (!e.target.value.trim()) setNameMatches([]); }}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setManualBarcode(val);
+                  const q = val.trim().toLowerCase();
+                  if (q.length >= 2) {
+                    const all = getProducts();
+                    setNameMatches(all.filter((p) => p.name.toLowerCase().includes(q) || p.barcode?.includes(q)).slice(0, 8));
+                  } else {
+                    setNameMatches([]);
+                  }
+                }}
                 onKeyDown={(e) => e.key === "Enter" && handleManualAdd()}
                 className="pl-9 h-9 text-sm"
               />
@@ -267,10 +272,10 @@ export default function PDV() {
             </Button>
           </div>
           {/* Name search results */}
-          {nameMatches.length > 1 && (
+          {nameMatches.length > 0 && (
             <div className="border border-border rounded-lg overflow-hidden bg-card shadow-md">
               <p className="text-xs text-muted-foreground px-3 py-1.5 bg-muted/40 border-b border-border">
-                {nameMatches.length} produtos encontrados — escolha:
+                {nameMatches.length} produto{nameMatches.length > 1 ? "s" : ""} encontrado{nameMatches.length > 1 ? "s" : ""} — escolha:
               </p>
               <div className="max-h-40 overflow-y-auto divide-y divide-border">
                 {nameMatches.map((p) => (

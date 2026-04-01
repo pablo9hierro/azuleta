@@ -273,12 +273,17 @@ export default function CartDrawer({ open, onClose, items, setItems, inline }: C
     setCustomerSaving(true);
     try {
       const rawPhone = customerForm.phone.replace(/\D/g, "");
-      // Check if customer exists first to avoid RLS upsert conflicts
-      const existing = await getCustomerByPhone(rawPhone);
-      if (!existing) {
-        await upsertCustomer(customerForm.name.trim(), rawPhone);
-      }
-      const finalName = existing?.name ?? customerForm.name.trim();
+      const name = customerForm.name.trim();
+      // Check if customer exists; if not, try to create — but never block checkout
+      let finalName = name;
+      try {
+        const existing = await getCustomerByPhone(rawPhone);
+        if (existing) {
+          finalName = existing.name;
+        } else {
+          try { await upsertCustomer(name, rawPhone); } catch { /* ignore upsert failure */ }
+        }
+      } catch { /* ignore lookup failure */ }
       setCustomer({ name: finalName, phone: rawPhone });
       if (paymentMethod === "pix") {
         await doPixCheckout(finalName, rawPhone);
