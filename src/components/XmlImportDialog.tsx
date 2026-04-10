@@ -73,10 +73,12 @@ export default function XmlImportDialog({ open, products, existingProducts, onCo
   const defaultRows: EditRow[] = sorted.map(({ parsed, existingId }) => {
     if (existingId) {
       const saved = existingProducts.find((e) => e.id === existingId)!;
+      // Stock is SUMMED: existing stock + quantity from XML (restock logic)
+      const summedStock = saved.stock + (parsed.stock > 0 ? parsed.stock : 0);
       return {
         alias: saved.alias || "",
         price: numToDisplay(saved.price) || numToDisplay(parsed.price),
-        stock: String(parsed.stock > 0 ? parsed.stock : saved.stock),
+        stock: String(summedStock > 0 ? summedStock : saved.stock),
       };
     }
     return {
@@ -118,7 +120,7 @@ export default function XmlImportDialog({ open, products, existingProducts, onCo
           {existingCount > 0 && (
             <div className="flex gap-2 text-xs shrink-0">
               <span className="flex items-center gap-1 bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 px-2 py-1 rounded-full font-medium">
-                <RefreshCw size={11} /> {existingCount} já cadastrado{existingCount !== 1 ? "s" : ""}
+                <RefreshCw size={11} /> {existingCount} reabastecido{existingCount !== 1 ? "s" : ""}
               </span>
               {newCount > 0 && (
                 <span className="flex items-center gap-1 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400 px-2 py-1 rounded-full font-medium">
@@ -146,7 +148,7 @@ export default function XmlImportDialog({ open, products, existingProducts, onCo
                 <th className="text-right px-3 py-2.5 font-semibold text-xs whitespace-nowrap text-primary">
                   Preço ✏️
                 </th>
-                <th className="text-right px-3 py-2.5 font-semibold text-xs whitespace-nowrap text-primary">
+                <th className="text-right px-3 py-2.5 font-semibold text-xs whitespace-nowrap text-primary" title="Para produtos já cadastrados, o valor é somado ao estoque atual">
                   Qtd. Estoque ✏️
                 </th>
               </tr>
@@ -161,7 +163,7 @@ export default function XmlImportDialog({ open, products, existingProducts, onCo
                   <tr key={i} className={rowClass}>
                     <td className="px-2 py-2 whitespace-nowrap">
                       {isDuplicate ? (
-                        <span title="Produto já cadastrado — será atualizado">
+                        <span title="Produto já cadastrado — estoque será somado">
                           <RefreshCw size={13} className="text-amber-500" />
                         </span>
                       ) : (
