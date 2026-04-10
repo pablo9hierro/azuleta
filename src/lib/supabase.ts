@@ -1,14 +1,24 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Product, UpsertProduct } from "@/data/store";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+// Supabase anon keys are public credentials — safe to be in client-side code.
+// Fallback to hardcoded values so the app works regardless of env var config.
+const supabaseUrl =
+  (import.meta.env.VITE_SUPABASE_URL as string) || "https://qzwjnuiytqjriyoxcuko.supabase.co";
+const supabaseAnonKey =
+  (import.meta.env.VITE_SUPABASE_ANON_KEY as string) ||
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF6d2pudWl5dHFqcml5b3hjdWtvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5OTM4MzQsImV4cCI6MjA5MDU2OTgzNH0.KD3IThIqlhb4l-FBQE6EZpe22dCNoXEVBiA_03aZSrU";
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error("[supabase] VITE_SUPABASE_URL ou VITE_SUPABASE_ANON_KEY não configurados.");
-}
+// Use the project that has all tables. If env vars point elsewhere, force correct project.
+const CORRECT_PROJECT = "qzwjnuiytqjriyoxcuko";
+const resolvedUrl = supabaseUrl.includes(CORRECT_PROJECT)
+  ? supabaseUrl
+  : "https://qzwjnuiytqjriyoxcuko.supabase.co";
+const resolvedKey = supabaseUrl.includes(CORRECT_PROJECT)
+  ? supabaseAnonKey
+  : "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF6d2pudWl5dHFqcml5b3hjdWtvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5OTM4MzQsImV4cCI6MjA5MDU2OTgzNH0.KD3IThIqlhb4l-FBQE6EZpe22dCNoXEVBiA_03aZSrU";
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(resolvedUrl, resolvedKey);
 
 // ── Customer helpers ────────────────────────────────────────────────────────
 
