@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import type { Product, UpsertProduct } from "@/data/store";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
@@ -116,4 +117,123 @@ export async function getSalesByPhone(phone: string): Promise<SaleRow[]> {
     .order("created_at", { ascending: false });
   if (error) throw error;
   return data ?? [];
+}
+
+// ── Product helpers ──────────────────────────────────────────────────────────────────────────────────
+
+type DbProduct = {
+  id: string;
+  name: string;
+  alias: string | null;
+  description: string;
+  barcode: string | null;
+  price: number;
+  stock: number;
+  image_url: string | null;
+  deliverable: boolean;
+  created_at: string;
+  ncm: string | null;
+  cfop: string | null;
+  unit: string | null;
+  product_code: string | null;
+};
+
+function dbToProduct(row: DbProduct): Product {
+  return {
+    id: row.id,
+    name: row.name,
+    alias: row.alias ?? undefined,
+    description: row.description,
+    barcode: row.barcode ?? "",
+    price: Number(row.price),
+    stock: row.stock,
+    imageUrl: row.image_url ?? "",
+    deliverable: row.deliverable,
+    createdAt: row.created_at,
+    ncm: row.ncm ?? undefined,
+    cfop: row.cfop ?? undefined,
+    unit: row.unit ?? undefined,
+    productCode: row.product_code ?? undefined,
+  };
+}
+
+function productToDb(p: Omit<Product, "id" | "createdAt">) {
+  return {
+    name: p.name,
+    alias: p.alias ?? null,
+    description: p.description,
+    barcode: p.barcode || null,
+    price: p.price,
+    stock: p.stock,
+    image_url: p.imageUrl || null,
+    deliverable: p.deliverable,
+    ncm: p.ncm ?? null,
+    cfop: p.cfop ?? null,
+    unit: p.unit ?? null,
+    product_code: p.productCode ?? null,
+  };
+}
+
+export async function fetchAllProductsFromDB(): Promise<Product[]> {
+  const { data, error } = await supabase
+    .from("products")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data as DbProduct[]).map(dbToProduct);
+}
+
+export async function insertProductToDB(p: Omit<Product, "id" | "createdAt">): Promise<Product> {
+  const { data, error } = await supabase
+    .from("products")
+    .insert(productToDb(p))
+    .select()
+    .single();
+  if (error) throw error;
+  return dbToProduct(data as DbProduct);
+}
+
+export async function updateProductInDB(
+  id: string,
+  updates: Partial<Omit<Product, "id" | "createdAt">>
+): Promise<Product> {
+  const partialDb: Record<string, unknown> = {};
+  if (updates.name !== undefined) partialDb.name = updates.name;
+  if (updates.alias !== undefined) partialDb.alias = updates.alias ?? null;
+  if (updates.description !== undefined) partialDb.description = updates.description;
+  if (updates.barcode !== undefined) partialDb.barcode = updates.barcode || null;
+  if (updates.price !== undefined) partialDb.price = updates.price;
+  if (updates.stock !== undefined) partialDb.stock = updates.stock;
+  if (updates.imageUrl !== undefined) partialDb.image_url = updates.imageUrl || null;
+  if (updates.deliverable !== undefined) partialDb.deliverable = updates.deliverable;
+  if (updates.ncm !== undefined) partialDb.ncm = updates.ncm ?? null;
+  if (updates.cfop !== undefined) partialDb.cfop = updates.cfop ?? null;
+  if (updates.unit !== undefined) partialDb.unit = updates.unit ?? null;
+  if (updates.productCode !== undefined) partialDb.product_code = updates.productCode ?? null;
+  const { data, error } = await supabase
+    .from("products")
+    .update(partialDb)
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return dbToProduct(data as DbProduct);
+}
+
+export async function deleteProductFromDB(id: string): Promise<void> {
+  const { error } = await supabase.from("products").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function upsertProductsToDB(items: UpsertProduct[]): Promise<Product[]> {
+  const rows = items.map(({ existingId, ...product }) => ({
+    ...productToDb(product),
+    ...(existingId ? { id: existingId } : {}),
+  }));
+  const { data, error } = await supabase
+    .from("products")
+    .upsert(rows, { onConflict: "id", ignoreDuplicates: false })
+    .select();
+  if (error) throw error;
+  return (data as DbProduct[]).map(dbToProduct);
 }

@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import type { Product } from "@/data/store";
-import { updateProduct } from "@/data/store";
+import { useStore } from "@/contexts/StoreContext";
 import { toast } from "sonner";
 
 interface EditProductDialogProps {
@@ -15,6 +15,7 @@ interface EditProductDialogProps {
 }
 
 export default function EditProductDialog({ product, open, onClose, onUpdated }: EditProductDialogProps) {
+  const { updateProduct } = useStore();
   const [form, setForm] = useState({
     name: product?.name || "",
     description: product?.description || "",
@@ -37,20 +38,24 @@ export default function EditProductDialog({ product, open, onClose, onUpdated }:
     });
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!product) return;
-    updateProduct(product.id, {
-      name: form.name,
-      description: form.description,
-      barcode: form.barcode,
-      price: Number(form.price),
-      stock: Number(form.stock),
-      imageUrl: form.imageUrl,
-      deliverable: form.deliverable,
-    });
-    toast.success("Produto atualizado!");
-    onUpdated();
-    onClose();
+    try {
+      await updateProduct(product.id, {
+        name: form.name,
+        description: form.description,
+        barcode: form.barcode,
+        price: Number(form.price),
+        stock: Number(form.stock),
+        imageUrl: form.imageUrl,
+        deliverable: form.deliverable,
+      });
+      toast.success("Produto atualizado!");
+      onUpdated();
+      onClose();
+    } catch {
+      toast.error("Erro ao atualizar produto");
+    }
   };
 
   if (!product) return null;

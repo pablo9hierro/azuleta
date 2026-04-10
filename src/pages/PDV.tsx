@@ -2,8 +2,9 @@
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import Layout from "@/components/Layout";
 import PDVPaymentModal, { type PDVPaymentMethod } from "@/components/PDVPaymentModal";
-import { getProductByBarcode, getProducts, addSale } from "@/data/store";
+import { addSale } from "@/data/store";
 import type { Product } from "@/data/store";
+import { useStore } from "@/contexts/StoreContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -27,6 +28,7 @@ interface PDVItem {
 }
 
 export default function PDV() {
+  const { products: allProducts } = useStore();
   const [items, setItems] = useLocalStorage<PDVItem[]>("pdv_cart", []);
   const [manualBarcode, setManualBarcode] = useState("");
   const [scanning, setScanning] = useState(false);
@@ -65,7 +67,7 @@ export default function PDV() {
     if (code === lastScannedRef.current) return;
     lastScannedRef.current = code;
 
-    const product = getProductByBarcode(code);
+    const product = allProducts.find((p) => p.barcode === code);
     if (!product) {
       toast.error(`Produto nao encontrado: ${code}`, { duration: 2000 });
       return;
@@ -139,7 +141,7 @@ export default function PDV() {
     if (!input) return;
 
     // Try exact barcode first
-    const byBarcode = getProductByBarcode(input);
+    const byBarcode = allProducts.find((p) => p.barcode === input);
     if (byBarcode) {
       addByBarcode(input);
       setManualBarcode("");
@@ -148,7 +150,6 @@ export default function PDV() {
     }
 
     // Try name search
-    const allProducts = getProducts();
     const matches = allProducts.filter((p) =>
       p.name.toLowerCase().includes(input.toLowerCase()) || (p.alias && p.alias.toLowerCase().includes(input.toLowerCase()))
     );
@@ -257,8 +258,7 @@ export default function PDV() {
                   setManualBarcode(val);
                   const q = val.trim().toLowerCase();
                   if (q.length >= 2) {
-                    const all = getProducts();
-                    setNameMatches(all.filter((p) => p.name.toLowerCase().includes(q) || p.barcode?.includes(q) || (p.alias && p.alias.toLowerCase().includes(q))).slice(0, 8));
+                    setNameMatches(allProducts.filter((p) => p.name.toLowerCase().includes(q) || p.barcode?.includes(q) || (p.alias && p.alias.toLowerCase().includes(q))).slice(0, 8));
                   } else {
                     setNameMatches([]);
                   }

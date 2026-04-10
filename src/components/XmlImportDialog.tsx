@@ -1,12 +1,11 @@
 import { useLocalStorage } from "@/hooks/useLocalStorage";
-import type { Product } from "@/data/store";
+import type { Product, UpsertProduct } from "@/data/store";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { FileUp, Check, RefreshCw, Sparkles } from "lucide-react";
 
 type ParsedProduct = Omit<Product, "id" | "createdAt">;
-export type UpsertProduct = Omit<Product, "id" | "createdAt"> & { existingId?: string };
 
 interface EditRow {
   alias: string;

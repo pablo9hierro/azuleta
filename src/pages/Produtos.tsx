@@ -2,8 +2,9 @@ import { useState, useCallback } from "react";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import Layout from "@/components/Layout";
 import EditProductDialog from "@/components/EditProductDialog";
-import XmlImportDialog, { type UpsertProduct } from "@/components/XmlImportDialog";
-import { getProducts, addProduct, upsertProducts, parseProductsFromXML, deleteProduct, type Product } from "@/data/store";
+import XmlImportDialog from "@/components/XmlImportDialog";
+import { parseProductsFromXML, type Product, type UpsertProduct } from "@/data/store";
+import { useStore } from "@/contexts/StoreContext";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,7 @@ import { Upload, Plus, Pencil, Trash2, FileUp, Package, Search, Truck } from "lu
 import { toast } from "sonner";
 
 export default function Produtos() {
-  const [refresh, setRefresh] = useState(0);
+  const { products, loading, addProduct, deleteProduct, upsertProducts } = useStore();
   const [search, setSearch] = useState("");
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -24,30 +25,32 @@ export default function Produtos() {
   const [xmlParsed, setXmlParsed] = useLocalStorage<Omit<Product, "id" | "createdAt">[]>("xml_import_pending", []);
   const xmlDialogOpen = xmlParsed.length > 0;
 
-  const products = getProducts();
   const filtered = products.filter(
     (p) =>
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      (p.alias || p.name).toLowerCase().includes(search.toLowerCase()) ||
       p.barcode.includes(search)
   );
 
-  const handleManualAdd = () => {
+  const handleManualAdd = async () => {
     if (!manualForm.name.trim()) {
       toast.error("Nome do produto é obrigatório");
       return;
     }
-    addProduct({
-      name: manualForm.name,
-      description: manualForm.description || "unidade",
-      barcode: manualForm.barcode,
-      price: parseFloat(manualForm.price) || 0,
-      stock: parseInt(manualForm.stock) || 0,
-      imageUrl: manualForm.imageUrl,
-      deliverable: manualForm.deliverable,
-    });
-    setManualForm({ name: "", description: "", barcode: "", price: "", stock: "", imageUrl: "", deliverable: false });
-    setRefresh((r) => r + 1);
-    toast.success("Produto cadastrado!");
+    try {
+      await addProduct({
+        name: manualForm.name,
+        description: manualForm.description || "unidade",
+        barcode: manualForm.barcode,
+        price: parseFloat(manualForm.price) || 0,
+        stock: parseInt(manualForm.stock) || 0,
+        imageUrl: manualForm.imageUrl,
+        deliverable: manualForm.deliverable,
+      });
+      setManualForm({ name: "", description: "", barcode: "", price: "", stock: "", imageUrl: "", deliverable: false });
+      toast.success("Produto cadastrado!");
+    } catch {
+      toast.error("Erro ao cadastrar produto");
+    }
   };
 
   const handleXMLUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -73,22 +76,26 @@ export default function Produtos() {
     e.target.value = "";
   }, []);
 
-  const handleImportXML = (items: UpsertProduct[]) => {
-    upsertProducts(items);
-    setXmlParsed([]);
-    setRefresh((r) => r + 1);
-    const updated = items.filter((i) => i.existingId).length;
-    const created = items.length - updated;
-    const parts: string[] = [];
-    if (created > 0) parts.push(`${created} novo${created !== 1 ? "s" : ""}`);
-    if (updated > 0) parts.push(`${updated} atualizado${updated !== 1 ? "s" : ""}`);
-    toast.success(`Importação concluída: ${parts.join(" e ")} produto${items.length !== 1 ? "s" : ""}!`);
+  const handleImportXML = async (items: UpsertProduct[]) => {
+    try {
+      const { created, updated } = await upsertProducts(items);
+      setXmlParsed([]);
+      const parts: string[] = [];
+      if (created > 0) parts.push(`${created} novo${created !== 1 ? "s" : ""}`);
+      if (updated > 0) parts.push(`${updated} atualizado${updated !== 1 ? "s" : ""}`);
+      toast.success(`Importação concluída: ${parts.join(" e ")} produto${items.length !== 1 ? "s" : ""}!`);
+    } catch {
+      toast.error("Erro ao importar produtos");
+    }
   };
 
-  const handleDelete = (id: string) => {
-    deleteProduct(id);
-    setRefresh((r) => r + 1);
-    toast.success("Produto removido");
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteProduct(id);
+      toast.success("Produto removido");
+    } catch {
+      toast.error("Erro ao remover produto");
+    }
   };
 
   return (
@@ -266,7 +273,7 @@ export default function Produtos() {
           key={xmlParsed.length + xmlParsed[0]?.name}
           open={xmlDialogOpen}
           products={xmlParsed}
-          existingProducts={getProducts()}
+          existingProducts={products}
           onConfirm={handleImportXML}
           onCancel={() => { setXmlParsed([]); }}
         />

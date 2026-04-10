@@ -1,11 +1,14 @@
 import Layout from "@/components/Layout";
 import { getReportData } from "@/data/store";
+import { useStore } from "@/contexts/StoreContext";
 import { BarChart3, DollarSign, ShoppingBag, Package, TrendingUp } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
 const COLORS = ["hsl(215, 80%, 22%)", "hsl(35, 95%, 55%)", "hsl(145, 63%, 42%)", "hsl(0, 72%, 51%)"];
 
 export default function Relatorios() {
+  // Subscribe to products so component re-renders when Supabase data loads
+  const { products } = useStore();
   const report = getReportData();
 
   const paymentData = Object.entries(report.byMethod).map(([method, value]) => ({
@@ -21,7 +24,7 @@ export default function Relatorios() {
   const stats = [
     { label: "Receita Total", value: `R$ ${report.totalRevenue.toFixed(2).replace(".", ",")}`, icon: DollarSign, color: "text-success" },
     { label: "Vendas Realizadas", value: report.totalSales, icon: ShoppingBag, color: "text-primary" },
-    { label: "Produtos Cadastrados", value: report.totalProducts, icon: Package, color: "text-accent" },
+    { label: "Produtos Cadastrados", value: products.length, icon: Package, color: "text-accent" },
     { label: "Ticket Médio", value: `R$ ${report.avgTicket.toFixed(2).replace(".", ",")}`, icon: TrendingUp, color: "text-primary" },
   ];
 

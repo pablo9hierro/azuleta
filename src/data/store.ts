@@ -33,6 +33,9 @@ export interface Sale {
   deliveryReference?: string;
 }
 
+/** Product with optional existingId for upsert operations */
+export type UpsertProduct = Omit<Product, "id" | "createdAt"> & { existingId?: string };
+
 // AbacatePay-compatible billing structure
 export interface AbacatePayBilling {
   id: string;
@@ -50,63 +53,13 @@ export interface AbacatePayBilling {
 
 const PLACEHOLDER_IMAGE = "https://images.unsplash.com/photo-1504148455328-c376907d081c?w=300&h=300&fit=crop";
 
-let products: Product[] = [
-  {
-    id: "prod_001",
-    name: "Martelo de Unha 27mm",
-    description: "Martelo de unha em aço forjado, cabo de fibra de vidro",
-    barcode: "7891234567890",
-    price: 34.90,
-    stock: 45,
-    imageUrl: "https://images.unsplash.com/photo-1586864387789-628af9feed72?w=300&h=300&fit=crop",
-    deliverable: false,
-    createdAt: "2024-01-15T10:00:00Z",
-  },
-  {
-    id: "prod_002",
-    name: "Cimento CP-II 50kg",
-    description: "Saco de cimento Portland CP-II, 50kg",
-    barcode: "7891234567891",
-    price: 38.50,
-    stock: 120,
-    imageUrl: "https://images.unsplash.com/photo-1590680093498-1b2c6eddd20c?w=300&h=300&fit=crop",
-    deliverable: true,
-    createdAt: "2024-01-15T10:00:00Z",
-  },
-  {
-    id: "prod_003",
-    name: "Tinta Acrílica 18L Branco",
-    description: "Tinta acrílica para paredes internas e externas, cor branco neve",
-    barcode: "7891234567892",
-    price: 189.90,
-    stock: 30,
-    imageUrl: "https://images.unsplash.com/photo-1562259929-b4e1fd3aef09?w=300&h=300&fit=crop",
-    deliverable: true,
-    createdAt: "2024-01-16T10:00:00Z",
-  },
-  {
-    id: "prod_004",
-    name: "Parafuso Philips 4.5x40mm (100un)",
-    description: "Caixa com 100 parafusos philips em aço zincado",
-    barcode: "7891234567893",
-    price: 22.90,
-    stock: 200,
-    imageUrl: PLACEHOLDER_IMAGE,
-    deliverable: false,
-    createdAt: "2024-01-17T10:00:00Z",
-  },
-  {
-    id: "prod_005",
-    name: "Chave de Fenda 1/4\"",
-    description: "Chave de fenda ponta chata, cabo ergonômico",
-    barcode: "7891234567894",
-    price: 15.90,
-    stock: 60,
-    imageUrl: PLACEHOLDER_IMAGE,
-    deliverable: false,
-    createdAt: "2024-01-18T10:00:00Z",
-  },
-];
+// Products are loaded from Supabase via StoreContext; starts empty
+let products: Product[] = [];
+
+/** Overwrite the in-memory product cache (called by StoreContext on load/update) */
+export function setProductsCache(p: Product[]): void {
+  products = [...p];
+}
 
 let sales: Sale[] = [
   {

@@ -4,6 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "./contexts/AuthContext";
 import { CustomerProvider } from "./contexts/CustomerContext";
+import { StoreProvider } from "./contexts/StoreContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Index from "./pages/Index";
 import Produtos from "./pages/Produtos";
@@ -23,6 +24,7 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <CustomerProvider>
+            <StoreProvider>
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/meus-pedidos" element={<MeusPedidos />} />
@@ -33,6 +35,7 @@ const App = () => (
               <Route path="/test-barcode" element={<TestBarcode />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
+            </StoreProvider>
           </CustomerProvider>
         </AuthProvider>
       </BrowserRouter>

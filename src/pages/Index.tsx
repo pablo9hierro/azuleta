@@ -1,9 +1,10 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import Layout from "@/components/Layout";
 import ProductCard from "@/components/ProductCard";
 import CartDrawer, { type CartItem } from "@/components/CartDrawer";
-import { getProducts, type Product } from "@/data/store";
+import { type Product } from "@/data/store";
+import { useStore } from "@/contexts/StoreContext";
 import { ShoppingCart, Search, PackageSearch } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,7 @@ export default function Index() {
   const [cartItems, setCartItems] = useLocalStorage<CartItem[]>("cart_items", []);
   const navigate = useNavigate();
 
-  const products = useMemo(() => getProducts(), []);
+  const { products, loading } = useStore();
   const filtered = products.filter(
     (p) =>
       p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -96,8 +97,11 @@ export default function Index() {
             ))}
           </div>
 
-          {filtered.length === 0 && (
+          {filtered.length === 0 && !loading && (
             <p className="text-center text-muted-foreground py-20">Nenhum produto encontrado.</p>
+          )}
+          {loading && (
+            <p className="text-center text-muted-foreground py-20">Carregando produtos...</p>
           )}
         </div>
 
