@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
 import Layout from "@/components/Layout";
 import EditProductDialog from "@/components/EditProductDialog";
 import XmlImportDialog, { type UpsertProduct } from "@/components/XmlImportDialog";
@@ -20,8 +21,8 @@ export default function Produtos() {
     name: "", description: "", barcode: "", price: "", stock: "", imageUrl: "", deliverable: false,
   });
 
-  const [xmlDialogOpen, setXmlDialogOpen] = useState(false);
-  const [xmlParsed, setXmlParsed] = useState<Omit<Product, "id" | "createdAt">[]>([]);
+  const [xmlParsed, setXmlParsed] = useLocalStorage<Omit<Product, "id" | "createdAt">[]>("xml_import_pending", []);
+  const xmlDialogOpen = xmlParsed.length > 0;
 
   const products = getProducts();
   const filtered = products.filter(
@@ -63,7 +64,6 @@ export default function Produtos() {
           return;
         }
         setXmlParsed(parsed);
-        setXmlDialogOpen(true);
         toast.success(`${parsed.length} produtos encontrados no XML!`);
       } catch {
         toast.error("Erro ao processar o XML.");
@@ -75,7 +75,6 @@ export default function Produtos() {
 
   const handleImportXML = (items: UpsertProduct[]) => {
     upsertProducts(items);
-    setXmlDialogOpen(false);
     setXmlParsed([]);
     setRefresh((r) => r + 1);
     const updated = items.filter((i) => i.existingId).length;
@@ -269,7 +268,7 @@ export default function Produtos() {
           products={xmlParsed}
           existingProducts={getProducts()}
           onConfirm={handleImportXML}
-          onCancel={() => { setXmlDialogOpen(false); setXmlParsed([]); }}
+          onCancel={() => { setXmlParsed([]); }}
         />
       )}
     </Layout>

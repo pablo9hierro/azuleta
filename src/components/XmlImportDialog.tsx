@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
 import type { Product } from "@/data/store";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -68,24 +68,26 @@ export default function XmlImportDialog({ open, products, existingProducts, onCo
   const existingCount = sorted.filter((e) => e.existingId).length;
   const newCount = sorted.length - existingCount;
 
-  // Init edit rows: for existing products → use saved alias/price; for new → use XML values
-  const [rows, setRows] = useState<EditRow[]>(() =>
-    sorted.map(({ parsed, existingId }) => {
-      if (existingId) {
-        const saved = existingProducts.find((e) => e.id === existingId)!;
-        return {
-          alias: saved.alias || "",
-          price: numToDisplay(saved.price) || numToDisplay(parsed.price),
-          stock: String(parsed.stock > 0 ? parsed.stock : saved.stock),
-        };
-      }
+  // Stable key per product list — different uploads get different row state
+  const rowsKey = `xml_import_rows_${sorted.length}_${sorted[0]?.parsed.productCode || sorted[0]?.parsed.name || "x"}`;
+
+  const defaultRows: EditRow[] = sorted.map(({ parsed, existingId }) => {
+    if (existingId) {
+      const saved = existingProducts.find((e) => e.id === existingId)!;
       return {
-        alias: parsed.alias || "",
-        price: numToDisplay(parsed.price),
-        stock: parsed.stock > 0 ? String(parsed.stock) : "",
+        alias: saved.alias || "",
+        price: numToDisplay(saved.price) || numToDisplay(parsed.price),
+        stock: String(parsed.stock > 0 ? parsed.stock : saved.stock),
       };
-    })
-  );
+    }
+    return {
+      alias: parsed.alias || "",
+      price: numToDisplay(parsed.price),
+      stock: parsed.stock > 0 ? String(parsed.stock) : "",
+    };
+  });
+
+  const [rows, setRows] = useLocalStorage<EditRow[]>(rowsKey, defaultRows);
 
   const setRow = (i: number, partial: Partial<EditRow>) =>
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...partial } : r)));
