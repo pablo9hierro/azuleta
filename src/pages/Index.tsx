@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
 import Layout from "@/components/Layout";
 import ProductCard from "@/components/ProductCard";
 import CartDrawer, { type CartItem } from "@/components/CartDrawer";
@@ -10,8 +11,8 @@ import { useNavigate } from "react-router-dom";
 
 export default function Index() {
   const [search, setSearch] = useState("");
-  const [cartOpen, setCartOpen] = useState(false);
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [cartOpen, setCartOpen] = useLocalStorage<boolean>("cart_open", false);
+  const [cartItems, setCartItems] = useLocalStorage<CartItem[]>("cart_items", []);
   const navigate = useNavigate();
 
   const products = useMemo(() => getProducts(), []);

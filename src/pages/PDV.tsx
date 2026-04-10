@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect, useRef, useCallback } from "react";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
 import Layout from "@/components/Layout";
 import PDVPaymentModal, { type PDVPaymentMethod } from "@/components/PDVPaymentModal";
 import { getProductByBarcode, getProducts, addSale } from "@/data/store";
@@ -26,12 +27,12 @@ interface PDVItem {
 }
 
 export default function PDV() {
-  const [items, setItems] = useState<PDVItem[]>([]);
+  const [items, setItems] = useLocalStorage<PDVItem[]>("pdv_cart", []);
   const [manualBarcode, setManualBarcode] = useState("");
   const [scanning, setScanning] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [nameMatches, setNameMatches] = useState<Product[]>([]);
-  const [customTotal, setCustomTotal] = useState<number | null>(null);
+  const [customTotal, setCustomTotal] = useLocalStorage<number | null>("pdv_customTotal", null);
   const [editingTotal, setEditingTotal] = useState(false);
   const [customTotalInput, setCustomTotalInput] = useState("");
   const scannerRef = useRef<HTMLDivElement>(null);
