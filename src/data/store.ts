@@ -184,6 +184,19 @@ export function addProducts(items: Omit<Product, "id" | "createdAt">[]): Product
   return items.map((item) => addProduct(item));
 }
 
+/** Update existing product if found by productCode/barcode, otherwise create new. */
+export function upsertProducts(
+  items: (Omit<Product, "id" | "createdAt"> & { existingId?: string })[]
+): Product[] {
+  return items.map((item) => {
+    if (item.existingId) {
+      const { existingId, ...updates } = item;
+      return updateProduct(existingId, updates) ?? addProduct(updates);
+    }
+    return addProduct(item);
+  });
+}
+
 export function updateProduct(id: string, updates: Partial<Omit<Product, "id" | "createdAt">>): Product | null {
   const index = products.findIndex((p) => p.id === id);
   if (index === -1) return null;
@@ -261,6 +274,7 @@ export function parseProductsFromXML(xmlString: string): Omit<Product, "id" | "c
         const cProd = prod.querySelector("cProd")?.textContent || "";
         const barcode = cEAN && cEAN !== "SEM GTIN" ? cEAN : "";
         const price = parseFloat(prod.querySelector("vUnCom")?.textContent || "0");
+        const qCom = parseFloat(prod.querySelector("qCom")?.textContent || "0");
         const ncm = prod.querySelector("NCM")?.textContent || "";
         const cfop = prod.querySelector("CFOP")?.textContent || "";
 
@@ -269,7 +283,7 @@ export function parseProductsFromXML(xmlString: string): Omit<Product, "id" | "c
           description: unit,
           barcode,
           price: price || 0,
-          stock: 0,
+          stock: Math.floor(qCom) || 0,
           imageUrl: "",
           deliverable: false,
           ncm,

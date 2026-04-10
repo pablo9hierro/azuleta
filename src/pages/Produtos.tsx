@@ -1,8 +1,8 @@
 import { useState, useCallback } from "react";
 import Layout from "@/components/Layout";
 import EditProductDialog from "@/components/EditProductDialog";
-import XmlImportDialog from "@/components/XmlImportDialog";
-import { getProducts, addProduct, addProducts, parseProductsFromXML, deleteProduct, type Product } from "@/data/store";
+import XmlImportDialog, { type UpsertProduct } from "@/components/XmlImportDialog";
+import { getProducts, addProduct, upsertProducts, parseProductsFromXML, deleteProduct, type Product } from "@/data/store";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -20,9 +20,8 @@ export default function Produtos() {
     name: "", description: "", barcode: "", price: "", stock: "", imageUrl: "", deliverable: false,
   });
 
-  type ParsedProduct = Omit<Product, "id" | "createdAt">;
   const [xmlDialogOpen, setXmlDialogOpen] = useState(false);
-  const [xmlParsed, setXmlParsed] = useState<ParsedProduct[]>([]);
+  const [xmlParsed, setXmlParsed] = useState<Omit<Product, "id" | "createdAt">[]>([]);
 
   const products = getProducts();
   const filtered = products.filter(
@@ -74,12 +73,17 @@ export default function Produtos() {
     e.target.value = "";
   }, []);
 
-  const handleImportXML = (products: ParsedProduct[]) => {
-    addProducts(products);
+  const handleImportXML = (items: UpsertProduct[]) => {
+    upsertProducts(items);
     setXmlDialogOpen(false);
     setXmlParsed([]);
     setRefresh((r) => r + 1);
-    toast.success(`${products.length} produto${products.length !== 1 ? "s" : ""} importado${products.length !== 1 ? "s" : ""} com sucesso!`);
+    const updated = items.filter((i) => i.existingId).length;
+    const created = items.length - updated;
+    const parts: string[] = [];
+    if (created > 0) parts.push(`${created} novo${created !== 1 ? "s" : ""}`);
+    if (updated > 0) parts.push(`${updated} atualizado${updated !== 1 ? "s" : ""}`);
+    toast.success(`Importação concluída: ${parts.join(" e ")} produto${items.length !== 1 ? "s" : ""}!`);
   };
 
   const handleDelete = (id: string) => {
@@ -263,6 +267,7 @@ export default function Produtos() {
           key={xmlParsed.length + xmlParsed[0]?.name}
           open={xmlDialogOpen}
           products={xmlParsed}
+          existingProducts={getProducts()}
           onConfirm={handleImportXML}
           onCancel={() => { setXmlDialogOpen(false); setXmlParsed([]); }}
         />
