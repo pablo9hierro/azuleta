@@ -1,10 +1,12 @@
 // AbacatePay API Integration
 // Docs: https://abacatepay.readme.io/reference
 
+import { getAbacatePayKey } from "./apiKeys";
+
 const BASE_URL = "https://api.abacatepay.com/v1";
 
 function getApiKey(): string {
-  return import.meta.env.VITE_ABACATEPAY_API_KEY ?? "";
+  return getAbacatePayKey();
 }
 
 export interface AbacateProduct {

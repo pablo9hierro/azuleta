@@ -11,6 +11,11 @@ export interface Product {
   imageUrl: string;
   deliverable: boolean;
   createdAt: string;
+  // NF-e supplemental fields
+  ncm?: string;
+  cfop?: string;
+  unit?: string;
+  productCode?: string;
 }
 
 export interface Sale {
@@ -250,18 +255,26 @@ export function parseProductsFromXML(xmlString: string): Omit<Product, "id" | "c
       const prod = det.querySelector("prod");
       if (prod) {
         const name = prod.querySelector("xProd")?.textContent || "Produto sem nome";
-        const description = prod.querySelector("uCom")?.textContent || "unidade";
-        const barcode = prod.querySelector("cEAN")?.textContent || prod.querySelector("cProd")?.textContent || "";
+        const unit = prod.querySelector("uCom")?.textContent || "unidade";
+        const cEAN = prod.querySelector("cEAN")?.textContent || "";
+        const cProd = prod.querySelector("cProd")?.textContent || "";
+        const barcode = cEAN && cEAN !== "SEM GTIN" ? cEAN : "";
         const price = parseFloat(prod.querySelector("vUnCom")?.textContent || "0");
+        const ncm = prod.querySelector("NCM")?.textContent || "";
+        const cfop = prod.querySelector("CFOP")?.textContent || "";
 
         parsedProducts.push({
           name,
-          description,
-          barcode: barcode === "SEM GTIN" ? "" : barcode,
+          description: unit,
+          barcode,
           price: price || 0,
           stock: 0,
           imageUrl: "",
           deliverable: false,
+          ncm,
+          cfop,
+          unit,
+          productCode: cProd,
         });
       }
     });

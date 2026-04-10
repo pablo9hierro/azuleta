@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   Home, PackagePlus, BarChart3, ScanBarcode, ShoppingBag, LogOut,
-  User, Phone, Mail, Loader2, Lock, HardHat, CheckCircle2,
+  User, Phone, Mail, Loader2, Lock, HardHat, CheckCircle2, Settings,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCustomer } from "@/contexts/CustomerContext";
@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { getCustomerByPhone, upsertCustomer } from "@/lib/supabase";
+import { getAbacatePayKey, setAbacatePayKey, getMercadoPagoToken, setMercadoPagoToken } from "@/lib/apiKeys";
 import { toast } from "sonner";
 
 const publicNavItems = [
@@ -70,6 +71,24 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [regPassword, setRegPassword] = useState("");
   const [regLoading, setRegLoading] = useState(false);
   const [regEmailSent, setRegEmailSent] = useState(false);
+
+  // ── Settings modal state ─────────────────────────────────────────────────
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [abacateKeyInput, setAbacateKeyInput] = useState("");
+  const [mpTokenInput, setMpTokenInput] = useState("");
+
+  const openSettings = () => {
+    setAbacateKeyInput(getAbacatePayKey());
+    setMpTokenInput(getMercadoPagoToken());
+    setSettingsOpen(true);
+  };
+
+  const handleSaveSettings = () => {
+    setAbacatePayKey(abacateKeyInput);
+    setMercadoPagoToken(mpTokenInput);
+    toast.success("Chaves de API salvas!");
+    setSettingsOpen(false);
+  };
 
   const openModal = (tab: "cliente" | "lojista" | "register" = "cliente") => {
     setAuthTab(tab);
@@ -204,6 +223,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 <span className="hidden md:inline">Meus Pedidos</span>
               </Link>
             )}
+
+            {user && (
+              <button
+                onClick={openSettings}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/10"
+                title="Configurações de API"
+              >
+                <Settings size={18} />
+              </button>
+            )}
           </nav>
         </div>
       </header>
@@ -283,7 +312,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </Button>
             </div>
           ) : (
-          <Tabs value={authTab} onValueChange={(v) => setAuthTab(v as typeof authTab)}>
+          <Tabs value={customer && authTab === "register" ? "cliente" : authTab} onValueChange={(v) => setAuthTab(v as typeof authTab)}>
             <TabsList className={`grid w-full mb-4 ${customer ? "grid-cols-2" : "grid-cols-3"}`}>
               <TabsTrigger value="cliente">Cliente</TabsTrigger>
               <TabsTrigger value="lojista">Lojista</TabsTrigger>
@@ -432,6 +461,42 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </TabsContent>
           </Tabs>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Settings Modal (lojista only) ──────────────────────────────────── */}
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <div className="space-y-4">
+            <h3 className="font-bold text-base flex items-center gap-2">
+              <Settings size={18} /> Configurações de API
+            </h3>
+            <div>
+              <Label className="text-xs">AbacatePay — Chave API (PIX)</Label>
+              <Input
+                type="password"
+                placeholder="Chave API AbacatePay"
+                value={abacateKeyInput}
+                onChange={(e) => setAbacateKeyInput(e.target.value)}
+                className="h-9 text-sm font-mono mt-1"
+              />
+              <p className="text-xs text-muted-foreground mt-1">Para gerar cobranças PIX reais</p>
+            </div>
+            <div>
+              <Label className="text-xs">Mercado Pago — Access Token (Cartão de Crédito)</Label>
+              <Input
+                type="password"
+                placeholder="Access Token Mercado Pago"
+                value={mpTokenInput}
+                onChange={(e) => setMpTokenInput(e.target.value)}
+                className="h-9 text-sm font-mono mt-1"
+              />
+              <p className="text-xs text-muted-foreground mt-1">Para processar pagamentos com cartão de crédito</p>
+            </div>
+            <Button onClick={handleSaveSettings} className="w-full gap-2">
+              Salvar Chaves
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

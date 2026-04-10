@@ -19,6 +19,7 @@ import {
   type AbacateBilling,
   type AbacateProduct,
 } from "@/lib/abacatepay";
+import { isMercadoPagoConfigured, createMPPreference, type MPItem } from "@/lib/mercadopago";
 import { saveSaleToSupabase, upsertCustomer, getCustomerByPhone } from "@/lib/supabase";
 import { useCustomer } from "@/contexts/CustomerContext";
 import { toast } from "sonner";
@@ -274,19 +275,20 @@ export default function CartDrawer({ open, onClose, items, setItems, inline }: C
     try {
       const rawPhone = customerForm.phone.replace(/\D/g, "");
       const name = customerForm.name.trim();
-      // Check if customer exists; if not, try to create — but never block checkout
       let finalName = name;
       try {
         const existing = await getCustomerByPhone(rawPhone);
         if (existing) {
           finalName = existing.name;
         } else {
-          try { await upsertCustomer(name, rawPhone); } catch { /* ignore upsert failure */ }
+          try { await upsertCustomer(name, rawPhone); } catch { /* ignore */ }
         }
-      } catch { /* ignore lookup failure */ }
+      } catch { /* ignore */ }
       setCustomer({ name: finalName, phone: rawPhone });
       if (paymentMethod === "pix") {
         await doPixCheckout(finalName, rawPhone);
+      } else if (paymentMethod === "credit" && isMercadoPagoConfigured()) {
+        await doMPCheckout(finalName, rawPhone);
       } else {
         setStep("card-form");
       }
@@ -294,6 +296,35 @@ export default function CartDrawer({ open, onClose, items, setItems, inline }: C
       toast.error("Erro ao salvar identificação. Tente novamente.");
     } finally {
       setCustomerSaving(false);
+    }
+  };
+
+  const doMPCheckout = async (custName: string, custPhone: string) => {
+    setStep("card-processing");
+    try {
+      const sale = createSale("credit", custName);
+      saveSaleToSupabase({
+        total, paymentMethod: "credit", status: "paid",
+        customerName: custName, customerPhone: custPhone,
+        deliveryRequested: wantsDelivery,
+        deliveryCep: deliveryForm.cep,
+        deliveryNumber: deliveryForm.number,
+        deliveryReference: deliveryForm.reference,
+        items: items.map((i) => ({ productId: i.product.id, name: i.product.name, quantity: i.quantity, unitPrice: i.product.price })),
+      }).catch(() => {});
+      const mpItems: MPItem[] = items.map((i) => ({
+        id: i.product.id,
+        title: i.product.name,
+        quantity: i.quantity,
+        unit_price: i.product.price,
+        currency_id: "BRL",
+      }));
+      const preference = await createMPPreference({ items: mpItems, externalReference: sale.id });
+      window.location.href = preference.init_point;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro";
+      toast.error("Erro Mercado Pago: " + msg);
+      setStep("cart");
     }
   };
 
@@ -475,9 +506,13 @@ export default function CartDrawer({ open, onClose, items, setItems, inline }: C
                     <Button onClick={() => {
                       if (!validateDelivery()) return;
                       if (!customer) { setStep("customer-id"); return; }
-                      setStep("card-form");
+                      if (paymentMethod === "credit" && isMercadoPagoConfigured()) {
+                        doMPCheckout(customer.name, customer.phone);
+                      } else {
+                        setStep("card-form");
+                      }
                     }} className="w-full gap-2" size="lg">
-                      <CreditCard size={18} /> Pagar com {paymentMethod === "credit" ? "Crédito" : "Débito"}
+                      <CreditCard size={18} /> {paymentMethod === "credit" && isMercadoPagoConfigured() ? "Pagar com Mercado Pago" : `Pagar com ${paymentMethod === "credit" ? "Crédito" : "Débito"}`}
                     </Button>
                   )}
                 </div>

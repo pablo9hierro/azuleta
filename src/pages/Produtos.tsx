@@ -124,18 +124,22 @@ export default function Produtos() {
                     <table className="w-full text-sm">
                       <thead className="bg-muted sticky top-0">
                         <tr>
+                          <th className="text-left p-2 font-medium">Código</th>
                           <th className="text-left p-2 font-medium">Nome</th>
-                          <th className="text-left p-2 font-medium">Descrição</th>
-                          <th className="text-left p-2 font-medium">Cód. Barras</th>
+                          <th className="text-left p-2 font-medium">NCM</th>
+                          <th className="text-left p-2 font-medium">CFOP</th>
+                          <th className="text-left p-2 font-medium">Unidade</th>
                           <th className="text-right p-2 font-medium">Preço</th>
                         </tr>
                       </thead>
                       <tbody>
                         {xmlPreview.map((p, i) => (
                           <tr key={i} className="border-t border-border">
+                            <td className="p-2 font-mono text-xs">{p.productCode || p.barcode || "—"}</td>
                             <td className="p-2">{p.name}</td>
-                            <td className="p-2 text-muted-foreground">{p.description}</td>
-                            <td className="p-2 font-mono text-xs">{p.barcode || "—"}</td>
+                            <td className="p-2 font-mono text-xs">{p.ncm || "—"}</td>
+                            <td className="p-2 font-mono text-xs">{p.cfop || "—"}</td>
+                            <td className="p-2 text-muted-foreground">{p.unit || p.description || "—"}</td>
                             <td className="p-2 text-right">
                               {p.price > 0 ? `R$ ${p.price.toFixed(2).replace(".", ",")}` : "—"}
                             </td>
