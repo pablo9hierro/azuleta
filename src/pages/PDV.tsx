@@ -5,6 +5,7 @@ import PDVPaymentModal, { type PDVPaymentMethod } from "@/components/PDVPaymentM
 import { addSale } from "@/data/store";
 import type { Product } from "@/data/store";
 import { useStore } from "@/contexts/StoreContext";
+import { saveSaleToSupabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -29,6 +30,9 @@ interface PDVItem {
 
 export default function PDV() {
   const { products: allProducts } = useStore();
+  const allProductsRef = useRef<Product[]>([]);
+  useEffect(() => { allProductsRef.current = allProducts; }, [allProducts]);
+
   const [items, setItems] = useLocalStorage<PDVItem[]>("pdv_cart", []);
   const [manualBarcode, setManualBarcode] = useState("");
   const [scanning, setScanning] = useState(false);
@@ -67,7 +71,7 @@ export default function PDV() {
     if (code === lastScannedRef.current) return;
     lastScannedRef.current = code;
 
-    const product = allProducts.find((p) => p.barcode === code);
+    const product = allProductsRef.current.find((p) => p.barcode === code);
     if (!product) {
       toast.error(`Produto nao encontrado: ${code}`, { duration: 2000 });
       return;
@@ -141,7 +145,7 @@ export default function PDV() {
     if (!input) return;
 
     // Try exact barcode first
-    const byBarcode = allProducts.find((p) => p.barcode === input);
+    const byBarcode = allProductsRef.current.find((p) => p.barcode === input);
     if (byBarcode) {
       addByBarcode(input);
       setManualBarcode("");
@@ -150,7 +154,7 @@ export default function PDV() {
     }
 
     // Try name search
-    const matches = allProducts.filter((p) =>
+    const matches = allProductsRef.current.filter((p) =>
       p.name.toLowerCase().includes(input.toLowerCase()) || (p.alias && p.alias.toLowerCase().includes(input.toLowerCase()))
     );
     if (matches.length === 1) {
@@ -172,17 +176,28 @@ export default function PDV() {
   };
 
   const handlePaymentConfirm = (method: PDVPaymentMethod) => {
+    const saleItems = items.map((i) => ({
+      productId: i.product.id,
+      name: i.product.alias || i.product.name,
+      quantity: i.quantity,
+      unitPrice: i.product.price,
+    }));
     const sale = addSale({
-      products: items.map((i) => ({
-        productId: i.product.id,
-        name: i.product.alias || i.product.name,
-        quantity: i.quantity,
-        unitPrice: i.product.price,
-      })),
+      products: saleItems,
       total: finalTotal,
       paymentMethod: method,
       status: "paid",
     });
+    // Persist to Supabase (fire-and-forget, non-critical)
+    saveSaleToSupabase({
+      total: finalTotal,
+      paymentMethod: method,
+      status: "paid",
+      customerName: "",
+      customerPhone: "",
+      deliveryRequested: false,
+      items: saleItems,
+    }).catch((err) => console.error("[PDV] saveSaleToSupabase error:", err));
 
     const methodLabel: Record<PDVPaymentMethod, string> = {
       pix: "PIX",
@@ -258,7 +273,7 @@ export default function PDV() {
                   setManualBarcode(val);
                   const q = val.trim().toLowerCase();
                   if (q.length >= 2) {
-                    setNameMatches(allProducts.filter((p) => p.name.toLowerCase().includes(q) || p.barcode?.includes(q) || (p.alias && p.alias.toLowerCase().includes(q))).slice(0, 8));
+                    setNameMatches(allProductsRef.current.filter((p) => p.name.toLowerCase().includes(q) || p.barcode?.includes(q) || (p.alias && p.alias.toLowerCase().includes(q))).slice(0, 8));
                   } else {
                     setNameMatches([]);
                   }

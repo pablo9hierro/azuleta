@@ -84,7 +84,8 @@ export default function Produtos() {
       if (created > 0) parts.push(`${created} novo${created !== 1 ? "s" : ""}`);
       if (updated > 0) parts.push(`${updated} atualizado${updated !== 1 ? "s" : ""}`);
       toast.success(`Importação concluída: ${parts.join(" e ")} produto${items.length !== 1 ? "s" : ""}!`);
-    } catch {
+    } catch (err) {
+      console.error("[Produtos] handleImportXML error:", err);
       toast.error("Erro ao importar produtos");
     }
   };
@@ -93,7 +94,8 @@ export default function Produtos() {
     try {
       await deleteProduct(id);
       toast.success("Produto removido");
-    } catch {
+    } catch (err) {
+      console.error("[Produtos] handleDelete error:", err);
       toast.error("Erro ao remover produto");
     }
   };

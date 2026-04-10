@@ -4,6 +4,10 @@ import type { Product, UpsertProduct } from "@/data/store";
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error("[supabase] VITE_SUPABASE_URL ou VITE_SUPABASE_ANON_KEY não configurados.");
+}
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // ── Customer helpers ────────────────────────────────────────────────────────
@@ -96,7 +100,7 @@ export async function saveSaleToSupabase(params: {
     const { error: itemsErr } = await supabase.from("sale_items").insert(
       params.items.map((i) => ({
         sale_id: sale.id,
-        product_id: i.productId.startsWith("prod_") ? null : i.productId,
+        product_id: i.productId || null,
         product_name: i.name,
         quantity: i.quantity,
         unit_price: i.unitPrice,
@@ -226,14 +230,29 @@ export async function deleteProductFromDB(id: string): Promise<void> {
 }
 
 export async function upsertProductsToDB(items: UpsertProduct[]): Promise<Product[]> {
-  const rows = items.map(({ existingId, ...product }) => ({
-    ...productToDb(product),
-    ...(existingId ? { id: existingId } : {}),
-  }));
-  const { data, error } = await supabase
-    .from("products")
-    .upsert(rows, { onConflict: "id", ignoreDuplicates: false })
-    .select();
-  if (error) throw error;
-  return (data as DbProduct[]).map(dbToProduct);
+  const toInsert = items.filter((i) => !i.existingId);
+  const toUpdate = items.filter((i) => !!i.existingId);
+  const results: Product[] = [];
+
+  // Insert new products
+  if (toInsert.length > 0) {
+    const rows = toInsert.map(({ existingId: _e, ...p }) => productToDb(p));
+    const { data, error } = await supabase.from("products").insert(rows).select();
+    if (error) throw error;
+    results.push(...(data as DbProduct[]).map(dbToProduct));
+  }
+
+  // Update existing products (upsert by id)
+  if (toUpdate.length > 0) {
+    const rows = toUpdate.map(({ existingId, ...p }) => ({ ...productToDb(p), id: existingId! }));
+    const { data, error } = await supabase
+      .from("products")
+      .upsert(rows, { onConflict: "id" })
+      .select();
+    if (error) throw error;
+    results.push(...(data as DbProduct[]).map(dbToProduct));
+  }
+
+  return results;
 }
+

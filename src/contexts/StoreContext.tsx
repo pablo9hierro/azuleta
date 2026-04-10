@@ -30,7 +30,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     try {
       const data = await fetchAllProductsFromDB();
       setProducts(data);
-    } catch {
+    } catch (err) {
+      console.error("[StoreContext] fetchAllProductsFromDB error:", err);
       toast.error("Erro ao carregar produtos do banco de dados");
     } finally {
       setLoading(false);
