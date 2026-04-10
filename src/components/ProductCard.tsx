@@ -23,7 +23,7 @@ export default function ProductCard({ product, quantity = 0, onAdd, onRemove }: 
           {product.imageUrl ? (
             <img
               src={product.imageUrl}
-              alt={product.name}
+              alt={product.alias || product.name}
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
               loading="lazy"
             />
@@ -47,7 +47,7 @@ export default function ProductCard({ product, quantity = 0, onAdd, onRemove }: 
         </div>
 
         <div className="p-4 space-y-2">
-          <h3 className="font-semibold text-sm leading-tight">{product.name}</h3>
+          <h3 className="font-semibold text-sm leading-tight">{product.alias || product.name}</h3>
           <p className="text-xs text-muted-foreground">{product.description}</p>
 
           <div className="flex items-center justify-between pt-1">
@@ -97,7 +97,7 @@ export default function ProductCard({ product, quantity = 0, onAdd, onRemove }: 
           </button>
           <img
             src={product.imageUrl}
-            alt={product.name}
+            alt={product.alias || product.name}
             className="max-w-full max-h-full object-contain rounded-lg"
           />
         </div>

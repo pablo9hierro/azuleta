@@ -3,7 +3,8 @@
 
 export interface Product {
   id: string;
-  name: string;
+  name: string;         // original name from NF-e / XML (preserved, never changed)
+  alias?: string;       // display name chosen by lojista (shown to customers)
   description: string;
   barcode: string;
   price: number;

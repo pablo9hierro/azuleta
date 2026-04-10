@@ -147,7 +147,7 @@ export default function CartDrawer({ open, onClose, items, setItems, inline }: C
 
   const createSale = (method: PaymentMethod, custName?: string) =>
     addSale({
-      products: items.map((i) => ({ productId: i.product.id, name: i.product.name, quantity: i.quantity, unitPrice: i.product.price })),
+      products: items.map((i) => ({ productId: i.product.id, name: i.product.alias || i.product.name, quantity: i.quantity, unitPrice: i.product.price })),
       total, paymentMethod: method, status: "paid",
       customerName: custName ?? customer?.name,
       deliveryRequested: wantsDelivery,
@@ -196,7 +196,7 @@ export default function CartDrawer({ open, onClose, items, setItems, inline }: C
 
   const doPixCheckout = async (custName: string, custPhone: string) => {
     receiptSnapshotRef.current = {
-      items: items.map((i) => ({ name: i.product.name, quantity: i.quantity, unitPrice: i.product.price })),
+      items: items.map((i) => ({ name: i.product.alias || i.product.name, quantity: i.quantity, unitPrice: i.product.price })),
       total,
       paymentMethod: "pix",
       installments: "1",
@@ -219,15 +219,15 @@ export default function CartDrawer({ open, onClose, items, setItems, inline }: C
         deliveryCep: deliveryForm.cep,
         deliveryNumber: deliveryForm.number,
         deliveryReference: deliveryForm.reference,
-        items: items.map((i) => ({ productId: i.product.id, name: i.product.name, quantity: i.quantity, unitPrice: i.product.price })),
+        items: items.map((i) => ({ productId: i.product.id, name: i.product.alias || i.product.name, quantity: i.quantity, unitPrice: i.product.price })),
       }).catch(() => { /* non-critical */ });
 
       let billing: AbacateBilling;
       if (isAbacatePayConfigured()) {
         const abacateProducts: AbacateProduct[] = items.map((i) => ({
           externalId: i.product.id,
-          name: i.product.name,
-          description: i.product.description || i.product.name,
+          name: i.product.alias || i.product.name,
+          description: i.product.description || i.product.alias || i.product.name,
           quantity: i.quantity,
           price: Math.round(i.product.price * 100),
         }));
@@ -247,7 +247,7 @@ export default function CartDrawer({ open, onClose, items, setItems, inline }: C
           methods: ["PIX"],
           products: items.map((i) => ({
             externalId: i.product.id,
-            name: i.product.name,
+            name: i.product.alias || i.product.name,
             description: i.product.description,
             quantity: i.quantity,
             price: Math.round(i.product.price * 100),
@@ -310,11 +310,11 @@ export default function CartDrawer({ open, onClose, items, setItems, inline }: C
         deliveryCep: deliveryForm.cep,
         deliveryNumber: deliveryForm.number,
         deliveryReference: deliveryForm.reference,
-        items: items.map((i) => ({ productId: i.product.id, name: i.product.name, quantity: i.quantity, unitPrice: i.product.price })),
+        items: items.map((i) => ({ productId: i.product.id, name: i.product.alias || i.product.name, quantity: i.quantity, unitPrice: i.product.price })),
       }).catch(() => {});
       const mpItems: MPItem[] = items.map((i) => ({
         id: i.product.id,
-        title: i.product.name,
+        title: i.product.alias || i.product.name,
         quantity: i.quantity,
         unit_price: i.product.price,
         currency_id: "BRL",
@@ -354,7 +354,7 @@ export default function CartDrawer({ open, onClose, items, setItems, inline }: C
     const custName = customer?.name ?? customerForm.name.trim();
     const custPhone = customer?.phone ?? customerForm.phone.replace(/\D/g, "");
     receiptSnapshotRef.current = {
-      items: items.map((i) => ({ name: i.product.name, quantity: i.quantity, unitPrice: i.product.price })),
+      items: items.map((i) => ({ name: i.product.alias || i.product.name, quantity: i.quantity, unitPrice: i.product.price })),
       total,
       paymentMethod,
       installments: cardForm.installments,
@@ -376,7 +376,7 @@ export default function CartDrawer({ open, onClose, items, setItems, inline }: C
       deliveryCep: deliveryForm.cep,
       deliveryNumber: deliveryForm.number,
       deliveryReference: deliveryForm.reference,
-      items: items.map((i) => ({ productId: i.product.id, name: i.product.name, quantity: i.quantity, unitPrice: i.product.price })),
+      items: items.map((i) => ({ productId: i.product.id, name: i.product.alias || i.product.name, quantity: i.quantity, unitPrice: i.product.price })),
     }).catch(() => { /* non-critical */ });
     await new Promise((r) => setTimeout(r, 2500));
     setSuccessOrder(sale.id);
@@ -436,7 +436,7 @@ export default function CartDrawer({ open, onClose, items, setItems, inline }: C
                 {items.map((item) => (
                   <div key={item.product.id} className="flex items-center gap-3 bg-muted/50 rounded-lg p-3">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{item.product.name}</p>
+                      <p className="text-sm font-medium truncate">{item.product.alias || item.product.name}</p>
                       <p className="text-xs text-muted-foreground">{fmtBRL(item.product.price)}</p>
                       {item.product.deliverable && (
                         <span className="text-[10px] text-primary font-medium flex items-center gap-0.5 mt-0.5">

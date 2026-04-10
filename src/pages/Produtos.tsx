@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import Layout from "@/components/Layout";
 import EditProductDialog from "@/components/EditProductDialog";
+import XmlImportDialog from "@/components/XmlImportDialog";
 import { getProducts, addProduct, addProducts, parseProductsFromXML, deleteProduct, type Product } from "@/data/store";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,7 +20,9 @@ export default function Produtos() {
     name: "", description: "", barcode: "", price: "", stock: "", imageUrl: "", deliverable: false,
   });
 
-  const [xmlPreview, setXmlPreview] = useState<Omit<Product, "id" | "createdAt">[]>([]);
+  type ParsedProduct = Omit<Product, "id" | "createdAt">;
+  const [xmlDialogOpen, setXmlDialogOpen] = useState(false);
+  const [xmlParsed, setXmlParsed] = useState<ParsedProduct[]>([]);
 
   const products = getProducts();
   const filtered = products.filter(
@@ -60,7 +63,8 @@ export default function Produtos() {
           toast.error("Nenhum produto encontrado no XML. Verifique o formato.");
           return;
         }
-        setXmlPreview(parsed);
+        setXmlParsed(parsed);
+        setXmlDialogOpen(true);
         toast.success(`${parsed.length} produtos encontrados no XML!`);
       } catch {
         toast.error("Erro ao processar o XML.");
@@ -70,12 +74,12 @@ export default function Produtos() {
     e.target.value = "";
   }, []);
 
-  const handleImportXML = () => {
-    if (xmlPreview.length === 0) return;
-    addProducts(xmlPreview);
-    setXmlPreview([]);
+  const handleImportXML = (products: ParsedProduct[]) => {
+    addProducts(products);
+    setXmlDialogOpen(false);
+    setXmlParsed([]);
     setRefresh((r) => r + 1);
-    toast.success("Produtos importados com sucesso!");
+    toast.success(`${products.length} produto${products.length !== 1 ? "s" : ""} importado${products.length !== 1 ? "s" : ""} com sucesso!`);
   };
 
   const handleDelete = (id: string) => {
@@ -116,43 +120,6 @@ export default function Produtos() {
                   <input type="file" accept=".xml" className="hidden" onChange={handleXMLUpload} />
                 </label>
               </div>
-
-              {xmlPreview.length > 0 && (
-                <div className="space-y-3">
-                  <h3 className="font-semibold text-sm">{xmlPreview.length} produtos encontrados:</h3>
-                  <div className="max-h-64 overflow-y-auto rounded-lg border border-border">
-                    <table className="w-full text-sm">
-                      <thead className="bg-muted sticky top-0">
-                        <tr>
-                          <th className="text-left p-2 font-medium">Código</th>
-                          <th className="text-left p-2 font-medium">Nome</th>
-                          <th className="text-left p-2 font-medium">NCM</th>
-                          <th className="text-left p-2 font-medium">CFOP</th>
-                          <th className="text-left p-2 font-medium">Unidade</th>
-                          <th className="text-right p-2 font-medium">Preço</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {xmlPreview.map((p, i) => (
-                          <tr key={i} className="border-t border-border">
-                            <td className="p-2 font-mono text-xs">{p.productCode || p.barcode || "—"}</td>
-                            <td className="p-2">{p.name}</td>
-                            <td className="p-2 font-mono text-xs">{p.ncm || "—"}</td>
-                            <td className="p-2 font-mono text-xs">{p.cfop || "—"}</td>
-                            <td className="p-2 text-muted-foreground">{p.unit || p.description || "—"}</td>
-                            <td className="p-2 text-right">
-                              {p.price > 0 ? `R$ ${p.price.toFixed(2).replace(".", ",")}` : "—"}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <Button onClick={handleImportXML} className="gap-2">
-                    <Plus size={16} /> Importar {xmlPreview.length} Produtos
-                  </Button>
-                </div>
-              )}
             </div>
           </TabsContent>
 
@@ -233,7 +200,14 @@ export default function Produtos() {
                 <tbody>
                   {filtered.map((product) => (
                     <tr key={product.id} className="border-t border-border hover:bg-muted/30">
-                      <td className="p-3 font-medium">{product.name}</td>
+                      <td className="p-3">
+                        <p className="font-medium">{product.alias || product.name}</p>
+                        {product.alias && (
+                          <p className="text-[10px] text-muted-foreground truncate max-w-[160px]" title={product.name}>
+                            NFe: {product.name}
+                          </p>
+                        )}
+                      </td>
                       <td className="p-3 text-muted-foreground hidden sm:table-cell">{product.description}</td>
                       <td className="p-3 font-mono text-xs hidden md:table-cell">{product.barcode || "—"}</td>
                       <td className="p-3 text-right font-semibold">R$ {product.price.toFixed(2).replace(".", ",")}</td>
@@ -283,6 +257,16 @@ export default function Produtos() {
         onClose={() => { setEditOpen(false); setEditProduct(null); }}
         onUpdated={() => setRefresh((r) => r + 1)}
       />
+
+      {xmlDialogOpen && (
+        <XmlImportDialog
+          key={xmlParsed.length + xmlParsed[0]?.name}
+          open={xmlDialogOpen}
+          products={xmlParsed}
+          onConfirm={handleImportXML}
+          onCancel={() => { setXmlDialogOpen(false); setXmlParsed([]); }}
+        />
+      )}
     </Layout>
   );
 }

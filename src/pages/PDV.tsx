@@ -54,7 +54,7 @@ export default function PDV() {
       }
       return [...prev, { product, quantity: 1 }];
     });
-    toast.success(`${product.name} adicionado`, { duration: 1500 });
+    toast.success(`${product.alias || product.name} adicionado`, { duration: 1500 });
   }, []);
 
   const addByBarcode = useCallback((barcode: string) => {
@@ -150,7 +150,7 @@ export default function PDV() {
     // Try name search
     const allProducts = getProducts();
     const matches = allProducts.filter((p) =>
-      p.name.toLowerCase().includes(input.toLowerCase())
+      p.name.toLowerCase().includes(input.toLowerCase()) || (p.alias && p.alias.toLowerCase().includes(input.toLowerCase()))
     );
     if (matches.length === 1) {
       addProductToCart(matches[0]);
@@ -174,7 +174,7 @@ export default function PDV() {
     const sale = addSale({
       products: items.map((i) => ({
         productId: i.product.id,
-        name: i.product.name,
+        name: i.product.alias || i.product.name,
         quantity: i.quantity,
         unitPrice: i.product.price,
       })),
@@ -201,7 +201,7 @@ export default function PDV() {
 
   const cartRows = items.map((i) => ({
     productId: i.product.id,
-    name: i.product.name,
+    name: i.product.alias || i.product.name,
     description: i.product.description,
     quantity: i.quantity,
     unitPrice: i.product.price,
@@ -258,7 +258,7 @@ export default function PDV() {
                   const q = val.trim().toLowerCase();
                   if (q.length >= 2) {
                     const all = getProducts();
-                    setNameMatches(all.filter((p) => p.name.toLowerCase().includes(q) || p.barcode?.includes(q)).slice(0, 8));
+                    setNameMatches(all.filter((p) => p.name.toLowerCase().includes(q) || p.barcode?.includes(q) || (p.alias && p.alias.toLowerCase().includes(q))).slice(0, 8));
                   } else {
                     setNameMatches([]);
                   }
@@ -285,7 +285,7 @@ export default function PDV() {
                     onClick={() => { addProductToCart(p); setManualBarcode(""); setNameMatches([]); }}
                     className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-muted/50 text-left"
                   >
-                    <span className="font-medium truncate">{p.name}</span>
+                    <span className="font-medium truncate">{p.alias || p.name}</span>
                     <span className="text-xs text-muted-foreground shrink-0 ml-2">R$ {p.price.toFixed(2).replace(".", ",")}</span>
                   </button>
                 ))}
@@ -322,7 +322,7 @@ export default function PDV() {
               {items.map((item) => (
                 <div key={item.product.id} className="flex items-center gap-3 p-3">
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm truncate">{item.product.name}</p>
+                    <p className="font-medium text-sm truncate">{item.product.alias || item.product.name}</p>
                     <p className="text-xs text-muted-foreground font-mono">{item.product.barcode}</p>
                     <p className="text-xs text-muted-foreground">
                       R$ {item.product.price.toFixed(2).replace(".", ",")} x {item.quantity} ={" "}
