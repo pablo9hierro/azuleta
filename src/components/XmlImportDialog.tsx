@@ -40,6 +40,20 @@ function matchExisting(p: ParsedProduct, existing: Product[]): Product | undefin
   return undefined;
 }
 
+/** Convert a float to "R$ X,XX" display string */
+function numToDisplay(value: number): string {
+  if (!value || value <= 0) return "";
+  return (Math.round(value * 100) / 100).toFixed(2).replace(".", ",");
+}
+
+/** Currency mask: strip non-digits, treat as cents, format as "X,XX" */
+function maskCurrency(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return "";
+  const cents = parseInt(digits, 10);
+  return (cents / 100).toFixed(2).replace(".", ",");
+}
+
 export default function XmlImportDialog({ open, products, existingProducts, onConfirm, onCancel }: Props) {
   // Enrich with existing matches, sort: duplicates first then new
   const enriched: EnrichedProduct[] = products.map((p) => {
@@ -61,13 +75,13 @@ export default function XmlImportDialog({ open, products, existingProducts, onCo
         const saved = existingProducts.find((e) => e.id === existingId)!;
         return {
           alias: saved.alias || "",
-          price: saved.price > 0 ? saved.price.toFixed(2) : (parsed.price > 0 ? parsed.price.toFixed(2) : ""),
+          price: numToDisplay(saved.price) || numToDisplay(parsed.price),
           stock: String(parsed.stock > 0 ? parsed.stock : saved.stock),
         };
       }
       return {
         alias: parsed.alias || "",
-        price: parsed.price > 0 ? parsed.price.toFixed(2) : "",
+        price: numToDisplay(parsed.price),
         stock: parsed.stock > 0 ? String(parsed.stock) : "",
       };
     })
@@ -182,11 +196,10 @@ export default function XmlImportDialog({ open, products, existingProducts, onCo
                     </td>
                     <td className="px-3 py-2">
                       <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
+                        type="text"
+                        inputMode="numeric"
                         value={rows[i].price}
-                        onChange={(e) => setRow(i, { price: e.target.value })}
+                        onChange={(e) => setRow(i, { price: maskCurrency(e.target.value) })}
                         placeholder="0,00"
                         className="h-8 text-xs text-right min-w-[80px]"
                       />
